@@ -39,6 +39,7 @@ import { db } from '../../services/db';
 import { OrderInvoiceModal } from '../common/OrderInvoiceModal';
 import { AdminOrderFullDetailModal } from './AdminOrderFullDetailModal';
 import { TryAtHomeCountdown } from '../order/TryAtHomeCountdown';
+import { printInvoiceElement } from '../../utils/printInvoice';
 
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>(db.getOrders());
@@ -232,7 +233,7 @@ export const AdminOrders: React.FC = () => {
   };
 
   const handlePrintManifest = () => {
-    window.print();
+    printInvoiceElement('admin-orders-view', `Orders-Manifest-${new Date().toISOString().slice(0, 10)}`);
   };
 
   const handleUpdateStatus = (e: React.FormEvent) => {

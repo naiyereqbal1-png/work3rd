@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Search, Users, ShoppingBag, Eye, Calendar, Phone, Mail } from 'lucide-react';
+import { Search, Users, ShoppingBag, Eye, Calendar, Phone, Mail, Download, Printer, FileSpreadsheet, FileText } from 'lucide-react';
 import { Customer, Order } from '../../types';
 import { db } from '../../services/db';
+import { downloadInvoicePDF } from '../../utils/printInvoice';
 
 export const AdminCustomers: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>(db.getCustomers());
@@ -25,6 +26,62 @@ export const AdminCustomers: React.FC = () => {
     return true;
   });
 
+  const handleExportCSV = () => {
+    if (filteredCustomers.length === 0) {
+      alert('No customer records available to export.');
+      return;
+    }
+
+    const headers = [
+      'Customer ID',
+      'Customer Name',
+      'Mobile Number',
+      'VIP Status',
+      'Total Orders',
+      'Total Spent (INR)',
+      'Account Status',
+      'Registered Date',
+      'Primary Address'
+    ];
+
+    const rows = filteredCustomers.map((c) => {
+      const defaultAddr = c.addresses?.find((a) => a.is_default) || c.addresses?.[0];
+      const addressStr = defaultAddr
+        ? `"${defaultAddr.address}, ${defaultAddr.locality || ''}, ${defaultAddr.city}, ${defaultAddr.state} - ${defaultAddr.pincode}"`.replace(/\s+/g, ' ')
+        : '"N/A"';
+
+      return [
+        `"${c.customer_id || ''}"`,
+        `"${c.name || ''}"`,
+        `"+91 ${c.mobile || ''}"`,
+        `"${c.is_vip ? 'VIP Customer' : 'Regular'}"`,
+        c.total_orders || 0,
+        c.total_spent || 0,
+        `"${c.status || 'ACTIVE'}"`,
+        `"${new Date(c.created_at || Date.now()).toLocaleDateString('en-IN')}"`,
+        addressStr
+      ].join(',');
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Customer_Directory_Export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPDF = async () => {
+    if (filteredCustomers.length === 0) {
+      alert('No customer records available to export.');
+      return;
+    }
+
+    await downloadInvoicePDF('printable-customer-report', `Customer_Directory_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <div id="admin-customers-view" className="space-y-6">
       {/* Header */}
@@ -36,8 +93,30 @@ export const AdminCustomers: React.FC = () => {
           </p>
         </div>
 
-        <div className="text-xs font-bold text-slate-700 bg-slate-100 px-3.5 py-2 rounded-xl">
-          Total Customers: <span className="text-indigo-700 font-extrabold">{customers.length}</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            id="admin-customers-export-excel-btn"
+            onClick={handleExportCSV}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Export all customer details into Excel CSV spreadsheet"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export Excel</span>
+          </button>
+
+          <button
+            id="admin-customers-export-pdf-btn"
+            onClick={handleExportPDF}
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-xl shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Export customer directory to PDF document"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
+
+          <div className="text-xs font-bold text-slate-700 bg-slate-100 px-3.5 py-2 rounded-xl">
+            Total Customers: <span className="text-indigo-700 font-extrabold">{customers.length}</span>
+          </div>
         </div>
       </div>
 
@@ -243,6 +322,91 @@ export const AdminCustomers: React.FC = () => {
               <p className="text-xs font-bold">Select a customer to view their complete profile</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Off-screen Printable PDF Template for All Customers */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '850px' }}>
+        <div id="printable-customer-report" className="bg-white p-6 space-y-4 font-sans text-slate-900">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+            <div>
+              <h1 className="text-xl font-black text-indigo-900 uppercase tracking-wide">STYLE SPHERE FASHIONS</h1>
+              <p className="text-xs font-bold text-slate-500">Registered Customers Directory & VIP Intelligence Report</p>
+            </div>
+            <div className="text-right text-xs">
+              <p className="font-bold text-slate-700">Date: {new Date().toLocaleDateString('en-IN')}</p>
+              <p className="text-slate-500">Total Records: {filteredCustomers.length}</p>
+            </div>
+          </div>
+
+          {/* Summary KPI Cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Customers</span>
+              <span className="text-base font-black text-slate-900">{filteredCustomers.length}</span>
+            </div>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-center">
+              <span className="text-[10px] font-bold text-amber-700 uppercase block">VIP Special Customers</span>
+              <span className="text-base font-black text-amber-900">{filteredCustomers.filter(c => c.is_vip).length}</span>
+            </div>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+              <span className="text-[10px] font-bold text-emerald-700 uppercase block">Total Combined Spent</span>
+              <span className="text-base font-black text-emerald-900">
+                ₹{filteredCustomers.reduce((acc, c) => acc + (c.total_spent || 0), 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+          </div>
+
+          {/* Detailed Customer Data Table */}
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-900 text-white font-extrabold uppercase text-[9px]">
+                <th className="p-2 border border-slate-800">Cust ID</th>
+                <th className="p-2 border border-slate-800">Customer Name</th>
+                <th className="p-2 border border-slate-800">Mobile</th>
+                <th className="p-2 border border-slate-800">VIP Status</th>
+                <th className="p-2 border border-slate-800 text-center">Orders</th>
+                <th className="p-2 border border-slate-800 text-right">Total Spent</th>
+                <th className="p-2 border border-slate-800">Registered Address</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCustomers.map((c, i) => {
+                const addr = c.addresses?.find((a) => a.is_default) || c.addresses?.[0];
+                const fullAddressStr = addr
+                  ? `${addr.address}, ${addr.city}, ${addr.state} - ${addr.pincode}`
+                  : 'N/A';
+
+                return (
+                  <tr key={c.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                    <td className="p-2 border border-slate-200 font-mono font-bold text-indigo-900">{c.customer_id}</td>
+                    <td className="p-2 border border-slate-200 font-bold text-slate-900">{c.name}</td>
+                    <td className="p-2 border border-slate-200 font-mono">+91 {c.mobile}</td>
+                    <td className="p-2 border border-slate-200 font-bold text-[10px]">
+                      {c.is_vip ? (
+                        <span className="text-amber-700 font-black">★ VIP Priority</span>
+                      ) : (
+                        <span className="text-slate-500">Regular</span>
+                      )}
+                    </td>
+                    <td className="p-2 border border-slate-200 text-center font-bold">{c.total_orders || 0}</td>
+                    <td className="p-2 border border-slate-200 text-right font-black">
+                      ₹{(c.total_spent || 0).toLocaleString('en-IN')}
+                    </td>
+                    <td className="p-2 border border-slate-200 text-[10px] text-slate-600">
+                      {fullAddressStr}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="pt-4 border-t border-slate-200 text-[10px] text-slate-400 flex justify-between">
+            <span>Official Merchant Customer Directory Sheet</span>
+            <span>Style Sphere Admin Studio</span>
+          </div>
         </div>
       </div>
     </div>

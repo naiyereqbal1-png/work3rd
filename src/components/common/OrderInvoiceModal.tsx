@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Order } from '../../types';
 import { db } from '../../services/db';
-import { XCircle, Printer, CheckCircle, FileText, Home, Lock, RotateCcw, ShieldCheck } from 'lucide-react';
+import { XCircle, Printer, CheckCircle, FileText, Home, Lock, RotateCcw, ShieldCheck, Download } from 'lucide-react';
 import { TryAtHomeCountdown } from '../order/TryAtHomeCountdown';
+import { printInvoiceElement, downloadInvoicePDF } from '../../utils/printInvoice';
 
 interface OrderInvoiceModalProps {
   order: Order | null;
@@ -45,7 +46,11 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    printInvoiceElement('printable-invoice-card', `Tax-Invoice-${currentOrder.order_id}`);
+  };
+
+  const handleDownloadPDF = async () => {
+    await downloadInvoicePDF('printable-invoice-card', `Invoice-${currentOrder.order_id}.pdf`);
   };
 
   return (
@@ -78,7 +83,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           }
         }
       `}</style>
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col print:max-h-none print:shadow-none print:border-none print:w-full">
+      <div id="printable-invoice-card" className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col print:max-h-none print:shadow-none print:border-none print:w-full">
         {/* Header */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:bg-slate-900 print:text-white">
           <div className="flex items-center gap-3">
@@ -460,12 +465,21 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleDownloadPDF}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              title="Download Tax Invoice as PDF file"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download PDF</span>
+            </button>
             <button
               onClick={handlePrint}
               className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Print Bill / Invoice"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-3.5 h-3.5 text-slate-700" />
               <span>Print Bill</span>
             </button>
             <button
