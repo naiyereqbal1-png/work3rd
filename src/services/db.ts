@@ -1343,6 +1343,9 @@ class DatabaseService {
 
     all[idx] = updatedProd;
     this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    if (updatedProd.shopkeeper_id) {
+      this.recalculateShopkeeperStats(updatedProd.shopkeeper_id);
+    }
     notifyDataChanged();
     return updatedProd;
   }
