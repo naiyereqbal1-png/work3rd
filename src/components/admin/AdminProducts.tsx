@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Plus,
@@ -12,6 +12,7 @@ import {
   XCircle,
   Package,
   Layers,
+  RefreshCw,
 } from 'lucide-react';
 import { Product, Category, ProductStatus } from '../../types';
 import { db } from '../../services/db';
@@ -31,9 +32,39 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const refreshProducts = () => {
     setProducts(db.getAllProducts());
+  };
+
+  useEffect(() => {
+    const handleSync = () => {
+      refreshProducts();
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, []);
+
+  const handleSyncFromSupabase = async () => {
+    setIsSyncing(true);
+    setSyncStatus(null);
+    try {
+      const success = await db.syncFromSupabase();
+      if (success) {
+        setSyncStatus({ message: 'Garment catalog & products refreshed successfully from Supabase!', type: 'success' });
+        refreshProducts();
+      } else {
+        setSyncStatus({ message: 'Could not refresh catalog from Supabase. Live syncing might be configured incorrectly.', type: 'error' });
+      }
+    } catch (err: any) {
+      console.error("[Catalog Refresh] Sync error:", err);
+      setSyncStatus({ message: err.message || 'Error occurred while syncing products from database.', type: 'error' });
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncStatus(null), 4500);
+    }
   };
 
   const handleTogglePublish = (productId: string) => {
@@ -84,15 +115,37 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
           </p>
         </div>
 
-        <button
-          id="admin-add-product-btn"
-          onClick={onOpenAddProduct}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Garment</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            id="admin-sync-catalog-btn"
+            onClick={handleSyncFromSupabase}
+            disabled={isSyncing}
+            className={`px-4 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
+            <span>{isSyncing ? 'Refreshing Catalog...' : 'Refresh Catalog (Supabase)'}</span>
+          </button>
+
+          <button
+            id="admin-add-product-btn"
+            onClick={onOpenAddProduct}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Garment</span>
+          </button>
+        </div>
       </div>
+
+      {syncStatus && (
+        <div className={`p-4 rounded-xl border-2 text-xs font-bold animate-in fade-in duration-200 ${
+          syncStatus.type === 'success' 
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+            : 'bg-rose-50 text-rose-800 border-rose-200'
+        }`}>
+          {syncStatus.message}
+        </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">

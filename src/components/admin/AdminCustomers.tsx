@@ -84,7 +84,16 @@ export const AdminCustomers: React.FC = () => {
                       }`}
                     >
                       <td className="p-3.5 font-mono font-bold text-indigo-700">{c.customer_id}</td>
-                      <td className="p-3.5 font-bold text-slate-900">{c.name}</td>
+                      <td className="p-3.5 font-bold text-slate-900">
+                        <div className="flex items-center gap-1.5">
+                          <span>{c.name}</span>
+                          {c.is_vip && (
+                            <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                              VIP
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3.5 font-mono text-slate-600">+91 {c.mobile}</td>
                       <td className="p-3.5 font-bold text-slate-800">{c.total_orders ?? 0} orders</td>
                       <td className="p-3.5 font-extrabold text-slate-900">
@@ -114,16 +123,47 @@ export const AdminCustomers: React.FC = () => {
         <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4">
           {selectedCustomer ? (
             <div className="space-y-4">
-              <div className="pb-3 border-b border-slate-100">
-                <span className="font-mono text-[10px] text-indigo-700 font-bold">
-                  {selectedCustomer.customer_id}
-                </span>
-                <h3 className="text-base font-black text-slate-900">{selectedCustomer.name}</h3>
-                <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5" /> +91 {selectedCustomer.mobile}
+              <div className="flex items-start justify-between pb-3 border-b border-slate-100 gap-2">
+                <div>
+                  <span className="font-mono text-[10px] text-indigo-700 font-bold block">
+                    {selectedCustomer.customer_id}
                   </span>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-1.5 flex-wrap">
+                    <span>{selectedCustomer.name}</span>
+                    {selectedCustomer.is_vip && (
+                      <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
+                        VIP
+                      </span>
+                    )}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                    <span className="flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5" /> +91 {selectedCustomer.mobile}
+                    </span>
+                  </div>
                 </div>
+
+                <button
+                  id="customer-toggle-vip-btn"
+                  onClick={async () => {
+                    try {
+                      const updated = await db.toggleCustomerVipAsync(selectedCustomer.customer_id);
+                      if (updated) {
+                        setSelectedCustomer(updated);
+                        setCustomers(db.getCustomers());
+                      }
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to update VIP status.');
+                    }
+                  }}
+                  className={`px-2 py-1 text-[10px] font-extrabold rounded-lg border shadow-3xs cursor-pointer transition-colors shrink-0 ${
+                    selectedCustomer.is_vip
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  {selectedCustomer.is_vip ? 'Revoke VIP' : 'Mark VIP'}
+                </button>
               </div>
 
               {/* Stats row */}

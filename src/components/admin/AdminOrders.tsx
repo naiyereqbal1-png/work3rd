@@ -42,6 +42,7 @@ import { TryAtHomeCountdown } from '../order/TryAtHomeCountdown';
 
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>(db.getOrders());
+  const [viewMode, setViewMode] = useState<'LIST' | 'PIPELINE'>('PIPELINE');
   const [deliveryBoys, setDeliveryBoys] = useState<DeliveryBoy[]>(db.getDeliveryBoys());
   const [returns, setReturns] = useState<ProductReturn[]>(db.getReturns());
   const [search, setSearch] = useState('');
@@ -352,6 +353,51 @@ export const AdminOrders: React.FC = () => {
     return true;
   });
 
+  const allCustomersList = db.getCustomers();
+  const isCustomerVip = (mobile: string) => {
+    const cust = allCustomersList.find((c) => c.mobile === mobile || (c.addresses && c.addresses.some(a => a.mobile === mobile)));
+    return cust?.is_vip || false;
+  };
+
+  const handleDragStart = (e: React.DragEvent, orderId: string) => {
+    e.dataTransfer.setData('text/plain', orderId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetStatus: string) => {
+    e.preventDefault();
+    const orderId = e.dataTransfer.getData('text/plain');
+    if (!orderId) return;
+
+    const ord = orders.find((o) => o.order_id === orderId);
+    if (!ord) return;
+
+    if (db.isOrderLocked(ord)) {
+      alert('Order is locked: Final Bill & Invoice has been generated and locked. Status cannot be modified.');
+      return;
+    }
+
+    let finalStatus: OrderStatus = 'Pending';
+    if (targetStatus === 'New Order') finalStatus = 'Pending';
+    else if (targetStatus === 'Confirmed') finalStatus = 'Confirmed';
+    else if (targetStatus === 'Processing') finalStatus = 'Processing';
+    else if (targetStatus === 'Packed') finalStatus = 'Packed';
+    else if (targetStatus === 'Shipped') finalStatus = 'Shipped';
+    else if (targetStatus === 'Delivered') finalStatus = 'Delivered';
+    else if (targetStatus === 'Cancelled') finalStatus = 'Cancelled';
+
+    db.updateOrderStatus(
+      ord.order_id,
+      finalStatus,
+      'Merchant Admin Team',
+      `Status updated via drag-and-drop to ${targetStatus}`
+    );
+    refreshOrders();
+  };
+
   return (
     <div id="admin-orders-view" className="space-y-6">
       {/* Top Header */}
@@ -370,6 +416,30 @@ export const AdminOrders: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* View Mode Toggle Segmented Control */}
+          <div className="bg-slate-100 p-1 rounded-xl border border-slate-200 flex items-center gap-1">
+            <button
+              onClick={() => setViewMode('PIPELINE')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                viewMode === 'PIPELINE'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Order Pipeline (Kanban)
+            </button>
+            <button
+              onClick={() => setViewMode('LIST')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                viewMode === 'LIST'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Order List (Table)
+            </button>
+          </div>
+
           <button
             id="admin-orders-export-csv-btn"
             onClick={handleExportCSV}
@@ -788,8 +858,233 @@ export const AdminOrders: React.FC = () => {
         )}
       </div>
 
-      {/* Main Grid: Orders Table + Details Drawer */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {viewMode === 'PIPELINE' ? (
+        <div id="admin-orders-pipeline" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+              Drag & Drop Orders to Shift Lifecycle Stages
+            </h2>
+            <div className="text-[11px] font-bold text-slate-500">
+              Showing {filteredOrders.length} filtered orders
+            </div>
+          </div>
+
+          {/* Kanban Board Container */}
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4 overflow-x-auto pb-6 pt-1 min-w-[1250px]">
+            {[
+              { id: 'New Order', label: 'New Order 🆕', statuses: ['Pending'], headerBg: 'bg-slate-100 text-slate-800 border-slate-200' },
+              { id: 'Confirmed', label: 'Confirmed ✅', statuses: ['Confirmed'], headerBg: 'bg-blue-100/85 text-blue-900 border-blue-200' },
+              { id: 'Processing', label: 'Processing ⚙️', statuses: ['Processing'], headerBg: 'bg-indigo-100/85 text-indigo-900 border-indigo-200' },
+              { id: 'Packed', label: 'Packed 📦', statuses: ['Packed'], headerBg: 'bg-purple-100/85 text-purple-900 border-purple-200' },
+              { id: 'Shipped', label: 'Shipped 🚚', statuses: ['Shipped', 'Out for Delivery'], headerBg: 'bg-cyan-100/90 text-cyan-900 border-cyan-200' },
+              { id: 'Delivered', label: 'Delivered 🎉', statuses: ['Delivered'], headerBg: 'bg-emerald-100/85 text-emerald-900 border-emerald-200' },
+              { id: 'Cancelled', label: 'Cancelled ❌', statuses: ['Cancelled'], headerBg: 'bg-rose-100/85 text-rose-900 border-rose-200' },
+            ].map((stage) => {
+              const stageOrders = filteredOrders.filter((o) => {
+                const normalizedStatus = o.order_status === 'Pending' ? 'New Order' : o.order_status;
+                return stage.statuses.includes(normalizedStatus) || (stage.id === 'New Order' && o.order_status === 'Pending');
+              });
+
+              return (
+                <div
+                  key={stage.id}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, stage.id)}
+                  className="flex flex-col min-h-[550px] w-full bg-slate-50/70 border border-slate-200 rounded-2xl p-3 shadow-3xs hover:bg-slate-100/50 transition-colors"
+                >
+                  {/* Column Header */}
+                  <div className={`flex items-center justify-between p-2.5 rounded-xl border ${stage.headerBg} font-black text-xs mb-3 shadow-3xs`}>
+                    <span className="truncate">{stage.label}</span>
+                    <span className="bg-black/10 px-2 py-0.5 rounded-full text-[10px]">
+                      {stageOrders.length}
+                    </span>
+                  </div>
+
+                  {/* Column Body / Drop area */}
+                  <div className="flex-1 space-y-3 overflow-y-auto max-h-[600px] pr-1">
+                    {stageOrders.length === 0 ? (
+                      <div className="h-32 border border-dashed border-slate-200 rounded-xl flex items-center justify-center text-center text-[10px] text-slate-400 font-bold p-3 bg-white/40">
+                        Drag orders here
+                      </div>
+                    ) : (
+                      stageOrders.map((ord) => {
+                        const isVip = isCustomerVip(ord.mobile || '');
+                        const payable = db.getOrderPayableAmount(ord) ?? 0;
+                        const dateStr = new Date(ord.created_at || ord.order_date || Date.now()).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        });
+
+                        return (
+                          <div
+                            key={ord.order_id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, ord.order_id)}
+                            className={`p-3.5 bg-white border rounded-xl shadow-2xs hover:shadow-xs transition-all cursor-grab active:cursor-grabbing relative ${
+                              isVip ? 'border-amber-400 ring-2 ring-amber-300 bg-amber-50/5' : 'border-slate-200'
+                            }`}
+                          >
+                            {/* Special Customer Badge */}
+                            {isVip && (
+                              <div className="absolute top-2 right-2 bg-gradient-to-r from-amber-500 to-yellow-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-3xs tracking-wider uppercase flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-white animate-ping"></span>
+                                VIP Priority
+                              </div>
+                            )}
+
+                            {/* Order Header info */}
+                            <div className="flex items-center justify-between gap-1 mb-2">
+                              <span className="font-mono text-[10px] text-indigo-700 font-extrabold">
+                                {ord.order_id}
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-bold font-mono">
+                                {dateStr}
+                              </span>
+                            </div>
+
+                            {/* Customer Profile Row */}
+                            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100">
+                              <div className="w-7 h-7 rounded-full bg-slate-100 text-indigo-700 flex items-center justify-center font-black text-xs uppercase shadow-3xs shrink-0">
+                                {(ord.customer_name || 'C')[0]}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-slate-900 text-xs truncate leading-tight">
+                                  {ord.customer_name}
+                                </p>
+                                <p className="text-[10px] text-slate-500 font-mono leading-none mt-0.5">
+                                  +91 {ord.mobile}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Items / Product Details */}
+                            <div className="space-y-1 mb-2 text-[10px]">
+                              <p className="text-slate-400 font-bold uppercase text-[8px] tracking-wide">
+                                Ordered Items ({ord.items?.length || 0})
+                              </p>
+                              <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                                {(ord.items || []).map((it, idx) => (
+                                  <div key={idx} className="flex items-center gap-1.5 py-0.5">
+                                    {it.image_url && (
+                                      <img
+                                        src={it.image_url}
+                                        alt={it.product_name}
+                                        referrerPolicy="no-referrer"
+                                        className="w-5 h-5 rounded object-cover shadow-3xs shrink-0"
+                                      />
+                                    )}
+                                    <span className="font-bold text-slate-800 truncate flex-1 leading-tight">
+                                      {it.product_name}
+                                    </span>
+                                    <span className="text-slate-500 shrink-0 font-bold text-[9px]">
+                                      {it.size} x {it.quantity}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Stats Line (Total, Payment Status) */}
+                            <div className="grid grid-cols-2 gap-2 py-1.5 bg-slate-50 rounded-lg text-center mb-2.5 border border-slate-100">
+                              <div>
+                                <span className="text-[8px] font-bold text-slate-400 uppercase block leading-none">Payable</span>
+                                <span className="text-[11px] font-black text-slate-900 font-mono">
+                                  ₹{payable.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[8px] font-bold text-slate-400 uppercase block leading-none">Payment</span>
+                                <span className={`text-[8px] font-black rounded px-1.5 py-0.2 uppercase ${
+                                  ord.payment_status === 'PAID'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                }`}>
+                                  {ord.payment_status}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Delivery & Staff Row */}
+                            <div className="flex items-center justify-between text-[10px] mb-3 text-slate-600">
+                              <span className="flex items-center gap-1 font-semibold truncate max-w-[130px]">
+                                <Truck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="truncate">
+                                  {ord.assigned_delivery_boy_name ? (
+                                    <strong className="text-indigo-800 font-extrabold">{ord.assigned_delivery_boy_name}</strong>
+                                  ) : (
+                                    'Unassigned'
+                                  )}
+                                </span>
+                              </span>
+                              <span className={`text-[8px] font-black px-1 py-0.2 rounded ${
+                                ord.order_type === 'try_at_home'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse'
+                                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                              }`}>
+                                {ord.order_type === 'try_at_home' ? '🏠 Try' : '📦 Std'}
+                              </span>
+                            </div>
+
+                            {/* Quick Actions Footer */}
+                            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
+                              <button
+                                onClick={() => setFullDetailOrder(ord)}
+                                className="flex-1 py-1 px-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] rounded-lg cursor-pointer transition-colors text-center"
+                              >
+                                View Details
+                              </button>
+
+                              <select
+                                value={ord.order_status}
+                                onChange={(e) => {
+                                  const selectStatus = e.target.value as OrderStatus;
+                                  if (db.isOrderLocked(ord)) {
+                                    alert('Order is locked: Final Bill & Invoice has been generated and locked. Status cannot be modified.');
+                                    return;
+                                  }
+                                  db.updateOrderStatus(
+                                    ord.order_id,
+                                    selectStatus,
+                                    'Merchant Admin Team',
+                                    `Status updated via quick status selector to ${selectStatus}`
+                                  );
+                                  refreshOrders();
+                                }}
+                                className="px-1 py-1 border border-slate-200 hover:border-slate-300 rounded-lg text-[9px] font-extrabold text-slate-700 cursor-pointer outline-hidden bg-white"
+                              >
+                                <option value="Pending">New Order</option>
+                                <option value="Confirmed">Confirmed</option>
+                                <option value="Processing">Processing</option>
+                                <option value="Packed">Packed</option>
+                                <option value="Shipped">Shipped</option>
+                                <option value="Out for Delivery">Out for Delivery</option>
+                                <option value="Delivered">Delivered</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+
+                              <a
+                                href={`tel:${ord.mobile}`}
+                                className="p-1 hover:bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer border border-slate-200 shrink-0"
+                                title="Contact Customer"
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Selected Order Details Panel - Placed first to appear on the left */}
         <div className="lg:col-span-4 lg:sticky lg:top-24 h-fit max-h-[calc(100vh-120px)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 space-y-3.5 text-[11px] font-semibold">
           {selectedOrder ? (
@@ -1615,6 +1910,7 @@ export const AdminOrders: React.FC = () => {
         </div>
 
       </div>
+    )}
 
       {/* Detailed Order / Invoice Modal */}
       {viewingInvoiceOrder && (

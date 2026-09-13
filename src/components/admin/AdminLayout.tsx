@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Package,
   Layers,
   Boxes,
-  FileSpreadsheet,
   ShoppingBag,
   Users,
   Settings,
@@ -22,7 +21,6 @@ import { AdminDashboard } from './AdminDashboard';
 import { AdminProducts } from './AdminProducts';
 import { AdminProductFormModal } from './AdminProductFormModal';
 import { AdminCategories } from './AdminCategories';
-import { AdminBulkImport } from './AdminBulkImport';
 import { AdminInventory } from './AdminInventory';
 import { AdminOrders } from './AdminOrders';
 import { AdminDeliveryBoys } from './AdminDeliveryBoys';
@@ -48,6 +46,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   const [categories, setCategories] = useState<Category[]>(db.getCategories());
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    const handleSync = () => {
+      setCategories(db.getCategories());
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, []);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -76,7 +82,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'CATEGORIES', label: 'Categories', icon: Layers },
     { id: 'SHOPKEEPERS', label: 'Shopkeeper Partners', icon: Store, badge: 'New' },
     { id: 'INVENTORY', label: 'Inventory & Stock', icon: Boxes },
-    { id: 'BULK_IMPORT', label: 'Bulk Import (Excel)', icon: FileSpreadsheet, badge: 'Excel' },
     { id: 'ORDERS', label: 'Order History & Orders', icon: ShoppingBag },
     { id: 'DELIVERY_BOYS', label: 'Delivery Partner Portal', icon: Truck },
     { id: 'CUSTOMERS', label: 'Customers', icon: Users },
@@ -251,14 +256,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             {activeTab === 'SHOPKEEPERS' && <AdminShopkeepers />}
 
             {activeTab === 'INVENTORY' && <AdminInventory />}
-
-            {activeTab === 'BULK_IMPORT' && (
-              <AdminBulkImport
-                onImportComplete={() => {
-                  setActiveTab('PRODUCTS');
-                }}
-              />
-            )}
 
             {activeTab === 'ORDERS' && <AdminOrders />}
 

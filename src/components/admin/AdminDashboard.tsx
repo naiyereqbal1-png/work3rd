@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Plus,
-  FileSpreadsheet,
   Clock,
   Layers,
   CheckCircle,
@@ -64,15 +63,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <Plus className="w-4 h-4" />
             <span>Add Garment</span>
-          </button>
-
-          <button
-            id="dashboard-quick-bulk-import-btn"
-            onClick={() => onNavigateTab('BULK_IMPORT')}
-            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Bulk Import (Excel)</span>
           </button>
         </div>
       </div>

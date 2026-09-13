@@ -47,6 +47,7 @@ export interface Customer {
   total_spent: number;
   last_order_at?: string;
   addresses: CustomerAddress[];
+  is_vip?: boolean;
 }
 
 export interface Category {

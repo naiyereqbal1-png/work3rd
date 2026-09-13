@@ -2749,6 +2749,31 @@ class DatabaseService {
     return updated;
   }
 
+  async toggleCustomerVipAsync(customerId: string): Promise<Customer | null> {
+    const customers = this.getCustomers();
+    const idx = customers.findIndex((c) => c.customer_id === customerId || c.id === customerId);
+    if (idx === -1) return null;
+
+    const original = customers[idx];
+    const updated = { ...original, is_vip: !original.is_vip };
+
+    const success = await supabaseSaveCustomer(updated);
+    if (!success) {
+      throw new Error("Failed to save VIP status to database.");
+    }
+
+    customers[idx] = updated;
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    
+    const currentCust = this.getCurrentCustomer();
+    if (currentCust && (currentCust.id === original.id || currentCust.customer_id === original.customer_id)) {
+      this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(updated));
+    }
+
+    notifyDataChanged();
+    return updated;
+  }
+
   async saveCustomerAddressAsync(addressData: Omit<CustomerAddress, 'id' | 'customer_id'>, addressId?: string): Promise<CustomerAddress | null> {
     const current = this.getCurrentCustomer();
     if (!current) return null;
