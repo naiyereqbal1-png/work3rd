@@ -193,10 +193,18 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                             <h4 className="font-bold text-slate-900 line-clamp-1 max-w-xs">
                               {p.name}
                             </h4>
-                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
                               <span>{p.gender}</span>
                               <span>•</span>
                               <span>{p.sizes.join(', ')}</span>
+                              {p.shopkeeper_name && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-extrabold text-amber-700 bg-amber-50 px-1 rounded border border-amber-200">
+                                    Shop: {p.shopkeeper_name}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>

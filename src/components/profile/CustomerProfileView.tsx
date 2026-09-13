@@ -165,12 +165,12 @@ export const CustomerProfileView: React.FC<CustomerProfileViewProps> = ({
 
   const handleEditClick = (addr: any) => {
     setEditingAddressId(addr.id);
-    setFormName(addr.name);
-    setFormMobile(addr.mobile);
-    setFormPincode(addr.pincode);
-    setFormAddress(addr.address);
-    setFormCity(addr.city);
-    setFormState(addr.state);
+    setFormName(addr.name || '');
+    setFormMobile(addr.mobile || '');
+    setFormPincode(addr.pincode || '');
+    setFormAddress(addr.address || '');
+    setFormCity(addr.city || '');
+    setFormState(addr.state || '');
     setFormLandmark(addr.landmark || '');
     setFormType(addr.address_type);
     setFormIsDefault(addr.is_default);

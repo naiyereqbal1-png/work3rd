@@ -104,12 +104,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handleStartEditAddress = (addr: CustomerAddress) => {
     setEditingAddressIdInCheckout(addr.id);
-    setNewName(addr.name);
-    setNewMobile(addr.mobile);
-    setNewPincode(addr.pincode);
-    setNewAddress(addr.address);
-    setNewCity(addr.city);
-    setNewState(addr.state);
+    setNewName(addr.name || '');
+    setNewMobile(addr.mobile || '');
+    setNewPincode(addr.pincode || '');
+    setNewAddress(addr.address || '');
+    setNewCity(addr.city || '');
+    setNewState(addr.state || '');
     setNewLandmark(addr.landmark || '');
     setNewType(addr.address_type);
     setIsAddingNewAddress(true);
