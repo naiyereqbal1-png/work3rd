@@ -511,6 +511,13 @@ export interface StoreSettings {
   try_at_home_duration_minutes?: number;
   try_at_home_auto_close_on_expiry?: boolean;
   try_at_home_charge?: number; // Non-refundable Try at Home Convenience Fee (₹)
+  // SMS & OTP Gateway Configuration (Configurable & change later)
+  sms_provider?: 'demo' | 'twilio' | 'fast2sms' | 'msg91';
+  sms_api_key?: string;
+  sms_sender_id?: string;
+  twilio_account_sid?: string;
+  twilio_auth_token?: string;
+  twilio_from_phone?: string;
 }
 
 export interface DashboardStats {

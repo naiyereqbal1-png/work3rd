@@ -31,7 +31,28 @@ import {
 } from '../types';
 import { generateDemoProducts, INITIAL_CATEGORIES } from './demoData';
 import * as XLSX from 'xlsx';
-import { pullFromSupabase, pushToSupabase } from './supabaseSync';
+import {
+  fetchFullDataFromSupabase,
+  supabaseSaveAddress,
+  supabaseDeleteAddress,
+  supabaseSaveOrder,
+  supabaseUpdateOrderStatus,
+  supabaseUpdateOrderShipping,
+  supabaseAssignDeliveryBoy,
+  supabaseSaveProduct,
+  supabaseUpdateProduct,
+  supabaseDeleteProduct,
+  supabaseSaveCustomer,
+  supabaseSaveCategory,
+  supabaseSaveShopkeeper,
+  supabaseSaveDeliveryBoy,
+  supabaseSaveSettings,
+  supabaseSaveReturn,
+  supabaseSaveStockTransaction,
+  supabaseSubscribeRealtime,
+  pullFromSupabase,
+  pushToSupabase,
+} from './supabaseSync';
 
 const STORAGE_KEYS = {
   PRODUCTS: 'style1_products',
@@ -71,6 +92,12 @@ const DEFAULT_SETTINGS: StoreSettings = {
   try_at_home_duration_minutes: 30,
   try_at_home_auto_close_on_expiry: true,
   try_at_home_charge: 99,
+  sms_provider: 'demo',
+  sms_api_key: 'DEMO_KEY_TRYATHOME_SMS_2026',
+  sms_sender_id: 'TRYHOM',
+  twilio_account_sid: 'AC_DEMO_TWILIO_ACCOUNT_SID_SUBABASE',
+  twilio_auth_token: 'AUTH_DEMO_TWILIO_SECRET_TOKEN',
+  twilio_from_phone: '+18005550199',
 };
 
 // Cross-tab and in-tab synchronization event
@@ -89,6 +116,84 @@ export const notifyDataChanged = () => {
 };
 
 class DatabaseService {
+  private memoryStore: Record<string, string> = {};
+
+  private getStorageItem = (key: string): string | null => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const item = localStorage.getItem(key);
+        if (item !== null) {
+          this.memoryStore[key] = item;
+          return item;
+        }
+      } catch {}
+    }
+    return this.memoryStore[key] ?? null;
+  };
+
+  private setStorageItem = (key: string, value: string): void => {
+    this.memoryStore[key] = value;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem(key, value);
+      } catch {}
+    }
+  };
+
+  private removeStorageItem = (key: string): void => {
+    delete this.memoryStore[key];
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+    }
+  };
+
+  async syncFromSupabase(): Promise<boolean> {
+    const cloud = await fetchFullDataFromSupabase();
+    if (!cloud) return false;
+
+    if (cloud.settings) {
+      this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(cloud.settings));
+    }
+    if (cloud.categories && cloud.categories.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cloud.categories));
+    }
+    if (cloud.products && cloud.products.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(cloud.products));
+    }
+    if (cloud.customers && cloud.customers.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cloud.customers));
+      const currentCust = this.getCurrentCustomer();
+      if (currentCust) {
+        const matched = cloud.customers.find((c) => c.customer_id === currentCust.customer_id || c.id === currentCust.id);
+        if (matched) {
+          this.setCurrentCustomer(matched);
+        }
+      }
+    }
+    if (cloud.orders && cloud.orders.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(cloud.orders));
+    }
+    if (cloud.deliveryBoys && cloud.deliveryBoys.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(cloud.deliveryBoys));
+    }
+    if (cloud.shopkeepers && cloud.shopkeepers.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(cloud.shopkeepers));
+    }
+    if (cloud.returns && cloud.returns.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.RETURNS, JSON.stringify(cloud.returns));
+    }
+    if (cloud.stockTransactions && cloud.stockTransactions.length > 0) {
+      this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(cloud.stockTransactions));
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('style1_data_changed'));
+    }
+    return true;
+  }
+
   constructor() {
     this.initDatabase();
     if (broadcastChannel) {
@@ -98,12 +203,13 @@ class DatabaseService {
         }
       };
     }
-    
+
     // Initial fetch from live Supabase DB on application startup
-    pullFromSupabase().then((updated) => {
-      if (updated && typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('style1_data_changed'));
-      }
+    this.syncFromSupabase();
+
+    // Subscribe to realtime database updates across all devices
+    supabaseSubscribeRealtime(() => {
+      this.syncFromSupabase();
     });
   }
 
@@ -111,35 +217,35 @@ class DatabaseService {
     if (typeof window === 'undefined') return;
 
     // Categories
-    const existingCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    const existingCats = this.getStorageItem(STORAGE_KEYS.CATEGORIES);
     if (!existingCats) {
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+      this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
     }
 
     // Products
-    const existingProds = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+    const existingProds = this.getStorageItem(STORAGE_KEYS.PRODUCTS);
     if (!existingProds) {
       const demoProds = generateDemoProducts();
-      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(demoProds));
+      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(demoProds));
     }
 
     // Settings
-    const existingSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    const existingSettings = this.getStorageItem(STORAGE_KEYS.SETTINGS);
     if (!existingSettings) {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
+      this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     } else {
       try {
         const parsed = JSON.parse(existingSettings);
         if (parsed.store_name === 'STYLE 1' || !parsed.store_name) {
           parsed.store_name = 'TRYatHOME';
           parsed.contact_email = 'care@tryathome.in';
-          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
+          this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
         }
       } catch {}
     }
 
     // Customers initial seed
-    const existingCustomers = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+    const existingCustomers = this.getStorageItem(STORAGE_KEYS.CUSTOMERS);
     if (!existingCustomers) {
       const defaultCustomers: Customer[] = [
         {
@@ -209,11 +315,11 @@ class DatabaseService {
           ],
         },
       ];
-      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(defaultCustomers));
+      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(defaultCustomers));
     }
 
     // Orders initial seed
-    const existingOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
+    const existingOrders = this.getStorageItem(STORAGE_KEYS.ORDERS);
     if (!existingOrders) {
       const demoOrders: Order[] = [
         {
@@ -374,12 +480,12 @@ class DatabaseService {
           ],
         },
       ];
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(demoOrders));
+      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(demoOrders));
     }
 
     // Ensure all existing orders have item_status and order_date
     try {
-      const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
+      const storedOrders = this.getStorageItem(STORAGE_KEYS.ORDERS);
       if (storedOrders) {
         const parsed: Order[] = JSON.parse(storedOrders);
         let modified = false;
@@ -398,7 +504,7 @@ class DatabaseService {
           }
         });
         if (modified) {
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(parsed));
+          this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(parsed));
         }
       }
     } catch {
@@ -406,7 +512,7 @@ class DatabaseService {
     }
 
     // Initialize delivery boys
-    const existingDeliveryBoys = localStorage.getItem(STORAGE_KEYS.DELIVERY_BOYS);
+    const existingDeliveryBoys = this.getStorageItem(STORAGE_KEYS.DELIVERY_BOYS);
     if (!existingDeliveryBoys) {
       const defaultDeliveryBoys: DeliveryBoy[] = [
         {
@@ -452,11 +558,11 @@ class DatabaseService {
           rating: 4.7,
         },
       ];
-      localStorage.setItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(defaultDeliveryBoys));
+      this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(defaultDeliveryBoys));
     }
 
     // Initialize admin accounts
-    const existingAdminAccounts = localStorage.getItem(STORAGE_KEYS.ADMIN_ACCOUNTS);
+    const existingAdminAccounts = this.getStorageItem(STORAGE_KEYS.ADMIN_ACCOUNTS);
     if (!existingAdminAccounts) {
       const defaultAdmins: AdminAccount[] = [
         {
@@ -469,11 +575,11 @@ class DatabaseService {
           created_at: new Date().toISOString(),
         },
       ];
-      localStorage.setItem(STORAGE_KEYS.ADMIN_ACCOUNTS, JSON.stringify(defaultAdmins));
+      this.setStorageItem(STORAGE_KEYS.ADMIN_ACCOUNTS, JSON.stringify(defaultAdmins));
     }
 
     // Initialize shopkeepers
-    const existingShopkeepers = localStorage.getItem(STORAGE_KEYS.SHOPKEEPERS);
+    const existingShopkeepers = this.getStorageItem(STORAGE_KEYS.SHOPKEEPERS);
     if (!existingShopkeepers) {
       const defaultShopkeeperPermissions: ShopkeeperPermissions = {
         can_view_dashboard: true,
@@ -544,7 +650,7 @@ class DatabaseService {
           total_orders: 5,
         },
       ];
-      localStorage.setItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(defaultShopkeepers));
+      this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(defaultShopkeepers));
     } else {
       // Ensure 9810101010 exists in already loaded shopkeepers
       try {
@@ -582,14 +688,14 @@ class DatabaseService {
             current_stock: 85,
             total_orders: 8,
           });
-          localStorage.setItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
+          this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
         }
       } catch {}
     }
 
     // Attach shopkeeper metadata to a few products if not yet present
     try {
-      const prodsRaw = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+      const prodsRaw = this.getStorageItem(STORAGE_KEYS.PRODUCTS);
       if (prodsRaw) {
         const prods: Product[] = JSON.parse(prodsRaw);
         let modified = false;
@@ -625,13 +731,13 @@ class DatabaseService {
           }
         }
         if (modified) {
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(prods));
+          this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(prods));
         }
       }
     } catch {}
 
     // Initialize stock transactions seed if none exists
-    const existingTx = localStorage.getItem(STORAGE_KEYS.STOCK_TRANSACTIONS);
+    const existingTx = this.getStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS);
     if (!existingTx) {
       const seedTx: StockTransaction[] = [
         {
@@ -694,14 +800,14 @@ class DatabaseService {
           timestamp: new Date(Date.now() - 12 * 86400000).toISOString(),
         },
       ];
-      localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(seedTx));
+      this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(seedTx));
     }
   }
 
   // ===================== STORE SETTINGS =====================
   getSettings(): StoreSettings {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const data = this.getStorageItem(STORAGE_KEYS.SETTINGS);
       return data ? JSON.parse(data) : DEFAULT_SETTINGS;
     } catch {
       return DEFAULT_SETTINGS;
@@ -711,7 +817,7 @@ class DatabaseService {
   updateSettings(newSettings: Partial<StoreSettings>): StoreSettings {
     const current = this.getSettings();
     const updated = { ...current, ...newSettings };
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+    this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
     notifyDataChanged();
     return updated;
   }
@@ -719,7 +825,7 @@ class DatabaseService {
   // ===================== CATEGORIES =====================
   getCategories(): Category[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+      const data = this.getStorageItem(STORAGE_KEYS.CATEGORIES);
       const list: Category[] = data ? JSON.parse(data) : INITIAL_CATEGORIES;
       const products = this.getAllProducts();
       // Count items dynamically
@@ -741,7 +847,7 @@ class DatabaseService {
       id: `cat-${categoryData.slug || Math.random().toString(36).substring(2, 9)}`,
     };
     categories.push(newCat);
-    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
     notifyDataChanged();
     return newCat;
   }
@@ -751,7 +857,7 @@ class DatabaseService {
     const idx = categories.findIndex((c) => c.id === id);
     if (idx === -1) return null;
     categories[idx] = { ...categories[idx], ...updates };
-    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
     notifyDataChanged();
     return categories[idx];
   }
@@ -759,7 +865,7 @@ class DatabaseService {
   deleteCategory(id: string): boolean {
     let categories = this.getCategories();
     categories = categories.filter((c) => c.id !== id);
-    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
     notifyDataChanged();
     return true;
   }
@@ -767,7 +873,7 @@ class DatabaseService {
   // ===================== PRODUCTS =====================
   getAllProducts(): Product[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+      const data = this.getStorageItem(STORAGE_KEYS.PRODUCTS);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -946,7 +1052,8 @@ class DatabaseService {
     };
 
     all.unshift(newProd);
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    supabaseSaveProduct(newProd).catch(() => {});
     notifyDataChanged();
     return newProd;
   }
@@ -987,7 +1094,8 @@ class DatabaseService {
       updated_at: new Date().toISOString(),
     };
 
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    supabaseUpdateProduct(id, all[idx]).catch(() => {});
     notifyDataChanged();
     return all[idx];
   }
@@ -1002,7 +1110,8 @@ class DatabaseService {
     all[idx].status = newStatus;
     all[idx].updated_at = new Date().toISOString();
 
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    supabaseUpdateProduct(id, { status: newStatus }).catch(() => {});
     notifyDataChanged();
     return all[idx];
   }
@@ -1023,7 +1132,8 @@ class DatabaseService {
   deleteProduct(id: string): boolean {
     let all = this.getAllProducts();
     all = all.filter((p) => p.id !== id);
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    supabaseDeleteProduct(id).catch(() => {});
     notifyDataChanged();
     return true;
   }
@@ -1031,7 +1141,7 @@ class DatabaseService {
   // ===================== CUSTOMER AUTH & PROFILE =====================
   getCustomers(): Customer[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+      const data = this.getStorageItem(STORAGE_KEYS.CUSTOMERS);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -1046,7 +1156,7 @@ class DatabaseService {
 
   getCurrentCustomer(): Customer | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_CUSTOMER);
+      const data = this.getStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER);
       return data ? JSON.parse(data) : null;
     } catch {
       return null;
@@ -1056,7 +1166,7 @@ class DatabaseService {
   // ===================== ADMIN ACCOUNTS =====================
   getAdmins(): AdminAccount[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.ADMIN_ACCOUNTS);
+      const data = this.getStorageItem(STORAGE_KEYS.ADMIN_ACCOUNTS);
       if (data) return JSON.parse(data);
       const defaultAdmins: AdminAccount[] = [
         {
@@ -1069,7 +1179,7 @@ class DatabaseService {
           created_at: new Date().toISOString(),
         },
       ];
-      localStorage.setItem(STORAGE_KEYS.ADMIN_ACCOUNTS, JSON.stringify(defaultAdmins));
+      this.setStorageItem(STORAGE_KEYS.ADMIN_ACCOUNTS, JSON.stringify(defaultAdmins));
       return defaultAdmins;
     } catch {
       return [];
@@ -1099,7 +1209,7 @@ class DatabaseService {
   // ===================== SHOPKEEPERS & INVENTORY MANAGEMENT =====================
   getShopkeepers(): Shopkeeper[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SHOPKEEPERS);
+      const data = this.getStorageItem(STORAGE_KEYS.SHOPKEEPERS);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -1181,7 +1291,7 @@ class DatabaseService {
     };
 
     shopkeepers.push(newShopkeeper);
-    localStorage.setItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(shopkeepers));
+    this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(shopkeepers));
     notifyDataChanged();
     return newShopkeeper;
   }
@@ -1199,7 +1309,7 @@ class DatabaseService {
         : list[idx].permissions,
     };
 
-    localStorage.setItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
+    this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
     notifyDataChanged();
     return list[idx];
   }
@@ -1209,14 +1319,14 @@ class DatabaseService {
     const idx = list.findIndex((s) => s.id === id || s.shopkeeper_id === id);
     if (idx === -1) return false;
     list[idx].status = 'INACTIVE';
-    localStorage.setItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
+    this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
     notifyDataChanged();
     return true;
   }
 
   getCurrentShopkeeper(): Shopkeeper | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_SHOPKEEPER);
+      const data = this.getStorageItem(STORAGE_KEYS.CURRENT_SHOPKEEPER);
       if (!data) return null;
       const parsed: Shopkeeper = JSON.parse(data);
       const latest = this.getShopkeeperById(parsed.id);
@@ -1228,9 +1338,9 @@ class DatabaseService {
 
   setCurrentShopkeeper(shop: Shopkeeper | null): void {
     if (!shop) {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_SHOPKEEPER);
+      this.removeStorageItem(STORAGE_KEYS.CURRENT_SHOPKEEPER);
     } else {
-      localStorage.setItem(STORAGE_KEYS.CURRENT_SHOPKEEPER, JSON.stringify(shop));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_SHOPKEEPER, JSON.stringify(shop));
     }
     notifyDataChanged();
   }
@@ -1254,7 +1364,7 @@ class DatabaseService {
     shopkeepers[idx].current_stock = totalStock;
     shopkeepers[idx].total_orders = orders.length;
 
-    localStorage.setItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(shopkeepers));
+    this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(shopkeepers));
     notifyDataChanged();
   }
 
@@ -1400,7 +1510,7 @@ class DatabaseService {
     };
 
     all.unshift(newProd);
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
 
     if (initStock > 0) {
       const transactions = this.getStockTransactions();
@@ -1426,7 +1536,7 @@ class DatabaseService {
         timestamp: new Date().toISOString(),
       };
       transactions.unshift(newTx);
-      localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
+      this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
     }
 
     this.recalculateShopkeeperStats(shopkeeper.id);
@@ -1544,7 +1654,7 @@ class DatabaseService {
 
   getStockTransactions(): StockTransaction[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.STOCK_TRANSACTIONS);
+      const data = this.getStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -1612,7 +1722,7 @@ class DatabaseService {
     };
 
     transactions.unshift(newTx);
-    localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
+    this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
 
     if (prod.shopkeeper_id) {
       this.recalculateShopkeeperStats(prod.shopkeeper_id);
@@ -1683,7 +1793,7 @@ class DatabaseService {
     };
 
     transactions.unshift(newTx);
-    localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
+    this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
 
     if (prod.shopkeeper_id) {
       this.recalculateShopkeeperStats(prod.shopkeeper_id);
@@ -1771,7 +1881,7 @@ class DatabaseService {
 
     // Rate limiting: allow re-send only after at least 10 seconds
     try {
-      const existingOtpRaw = localStorage.getItem(STORAGE_KEYS.ACTIVE_OTP);
+      const existingOtpRaw = this.getStorageItem(STORAGE_KEYS.ACTIVE_OTP);
       if (existingOtpRaw) {
         const existing = JSON.parse(existingOtpRaw);
         if (
@@ -1804,7 +1914,7 @@ class DatabaseService {
       created_at: Date.now(),
       expires_at,
     };
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_OTP, JSON.stringify(payload));
+    this.setStorageItem(STORAGE_KEYS.ACTIVE_OTP, JSON.stringify(payload));
 
     return {
       success: true,
@@ -1837,7 +1947,7 @@ class DatabaseService {
       return { success: false, error: 'Invalid mobile number.' };
     }
 
-    const storedOtpRaw = localStorage.getItem(STORAGE_KEYS.ACTIVE_OTP);
+    const storedOtpRaw = this.getStorageItem(STORAGE_KEYS.ACTIVE_OTP);
     let storedOtp: any = null;
 
     if (storedOtpRaw) {
@@ -1849,15 +1959,15 @@ class DatabaseService {
     // Check expiration and attempts
     if (storedOtp && storedOtp.mobile === cleanMobile) {
       if (Date.now() > storedOtp.expires_at) {
-        localStorage.removeItem(STORAGE_KEYS.ACTIVE_OTP);
+        this.removeStorageItem(STORAGE_KEYS.ACTIVE_OTP);
         return { success: false, error: 'OTP has expired. Please request a new verification code.' };
       }
       storedOtp.attempts = (storedOtp.attempts || 0) + 1;
       if (storedOtp.attempts > 5) {
-        localStorage.removeItem(STORAGE_KEYS.ACTIVE_OTP);
+        this.removeStorageItem(STORAGE_KEYS.ACTIVE_OTP);
         return { success: false, error: 'Too many incorrect attempts. Please request a new OTP.' };
       }
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_OTP, JSON.stringify(storedOtp));
+      this.setStorageItem(STORAGE_KEYS.ACTIVE_OTP, JSON.stringify(storedOtp));
     }
 
     const cleanInput = enteredOtp.trim();
@@ -1871,7 +1981,7 @@ class DatabaseService {
     }
 
     // Invalidate OTP on success
-    localStorage.removeItem(STORAGE_KEYS.ACTIVE_OTP);
+    this.removeStorageItem(STORAGE_KEYS.ACTIVE_OTP);
 
     // Resolve user & role strictly from database
     const roleInfo = this.checkMobileRole(cleanMobile);
@@ -1893,7 +2003,7 @@ class DatabaseService {
         role: 'super_admin',
         status: 'ACTIVE',
       };
-      localStorage.setItem(STORAGE_KEYS.CURRENT_ADMIN, JSON.stringify(adminUser));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_ADMIN, JSON.stringify(adminUser));
       session = {
         userId: adminAcc.id,
         role: 'ADMIN',
@@ -1906,7 +2016,7 @@ class DatabaseService {
       };
     } else if (roleInfo.role === 'SHOPKEEPER') {
       const shop = roleInfo.user as Shopkeeper;
-      localStorage.setItem(STORAGE_KEYS.CURRENT_SHOPKEEPER, JSON.stringify(shop));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_SHOPKEEPER, JSON.stringify(shop));
       session = {
         userId: shop.id,
         role: 'SHOPKEEPER',
@@ -1919,7 +2029,7 @@ class DatabaseService {
       };
     } else if (roleInfo.role === 'DELIVERY_BOY') {
       const boy = roleInfo.user as DeliveryBoy;
-      localStorage.setItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(boy));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(boy));
       session = {
         userId: boy.id,
         role: 'DELIVERY_BOY',
@@ -1932,7 +2042,7 @@ class DatabaseService {
       };
     } else {
       const cust = roleInfo.user as Customer;
-      localStorage.setItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(cust));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(cust));
       session = {
         userId: cust.id,
         role: 'CUSTOMER',
@@ -1945,7 +2055,7 @@ class DatabaseService {
       };
     }
 
-    localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(session));
+    this.setStorageItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(session));
     notifyDataChanged();
     return { success: true, session, role: session.role };
   }
@@ -2006,7 +2116,7 @@ class DatabaseService {
     };
 
     customers.push(newCustomer);
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
     notifyDataChanged();
 
     return { success: true, customer: newCustomer };
@@ -2017,7 +2127,7 @@ class DatabaseService {
    */
   getAuthSession(): AuthSession | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.AUTH_SESSION);
+      const data = this.getStorageItem(STORAGE_KEYS.AUTH_SESSION);
       if (!data) {
         // Fallback check for existing individual role sessions
         const curCust = this.getCurrentCustomer();
@@ -2032,7 +2142,7 @@ class DatabaseService {
             authenticated_at: new Date().toISOString(),
             expires_at: Date.now() + 7 * 86400000,
           };
-          localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
+          this.setStorageItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
           return sess;
         }
         const curAdmin = this.getCurrentAdmin();
@@ -2046,7 +2156,7 @@ class DatabaseService {
             authenticated_at: new Date().toISOString(),
             expires_at: Date.now() + 7 * 86400000,
           };
-          localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
+          this.setStorageItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
           return sess;
         }
         const curShop = this.getCurrentShopkeeper();
@@ -2061,7 +2171,7 @@ class DatabaseService {
             authenticated_at: new Date().toISOString(),
             expires_at: Date.now() + 7 * 86400000,
           };
-          localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
+          this.setStorageItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
           return sess;
         }
         const curBoy = this.getCurrentDeliveryBoy();
@@ -2075,7 +2185,7 @@ class DatabaseService {
             authenticated_at: new Date().toISOString(),
             expires_at: Date.now() + 7 * 86400000,
           };
-          localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
+          this.setStorageItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(sess));
           return sess;
         }
         return null;
@@ -2093,16 +2203,16 @@ class DatabaseService {
   }
 
   clearAuthSession(): void {
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+    this.removeStorageItem(STORAGE_KEYS.AUTH_SESSION);
   }
 
   logout(): void {
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_CUSTOMER);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_ADMIN);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_SHOPKEEPER);
-    localStorage.removeItem(STORAGE_KEYS.ACTIVE_OTP);
+    this.removeStorageItem(STORAGE_KEYS.AUTH_SESSION);
+    this.removeStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER);
+    this.removeStorageItem(STORAGE_KEYS.CURRENT_ADMIN);
+    this.removeStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY);
+    this.removeStorageItem(STORAGE_KEYS.CURRENT_SHOPKEEPER);
+    this.removeStorageItem(STORAGE_KEYS.ACTIVE_OTP);
     notifyDataChanged();
   }
 
@@ -2121,7 +2231,7 @@ class DatabaseService {
       otp,
       expires_at: Date.now() + 5 * 60 * 1000, // 5 mins
     };
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_OTP, JSON.stringify(otpPayload));
+    this.setStorageItem(STORAGE_KEYS.ACTIVE_OTP, JSON.stringify(otpPayload));
 
     // Log the API payload and request in the Demo API Provider Gateway logs
     import('./otpService').then(({ OtpService }) => {
@@ -2137,7 +2247,7 @@ class DatabaseService {
 
   verifyOtp(mobile: string, enteredOtp: string): { success: boolean; customer?: Customer; error?: string } {
     const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
-    const storedOtpRaw = localStorage.getItem(STORAGE_KEYS.ACTIVE_OTP);
+    const storedOtpRaw = this.getStorageItem(STORAGE_KEYS.ACTIVE_OTP);
 
     if (!storedOtpRaw) {
       // Fallback for easy demo verification if OTP expired or direct test
@@ -2160,7 +2270,7 @@ class DatabaseService {
       }
 
       // Valid OTP! Remove OTP and log in customer
-      localStorage.removeItem(STORAGE_KEYS.ACTIVE_OTP);
+      this.removeStorageItem(STORAGE_KEYS.ACTIVE_OTP);
       return this.loginOrRegisterCustomer(cleanMobile);
     } catch {
       return { success: false, error: 'Failed to process OTP verification.' };
@@ -2189,17 +2299,22 @@ class DatabaseService {
         addresses: [],
       };
       customers.push(customer);
-      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
     }
 
-    localStorage.setItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customer));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customer));
     notifyDataChanged();
     return { success: true, customer };
   }
 
+  setCurrentCustomer(customer: Customer): void {
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customer));
+    notifyDataChanged();
+  }
+
   customerLogout() {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_CUSTOMER);
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+    this.removeStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER);
+    this.removeStorageItem(STORAGE_KEYS.AUTH_SESSION);
     notifyDataChanged();
   }
 
@@ -2213,8 +2328,8 @@ class DatabaseService {
 
     const updated = { ...customers[idx], ...updates };
     customers[idx] = updated;
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
-    localStorage.setItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(updated));
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(updated));
     notifyDataChanged();
     return updated;
   }
@@ -2257,8 +2372,9 @@ class DatabaseService {
     }
 
     customers[cIdx].addresses = addresses;
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
-    localStorage.setItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
+    supabaseSaveAddress(savedAddr).catch(() => {});
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
     notifyDataChanged();
     return savedAddr;
   }
@@ -2276,8 +2392,9 @@ class DatabaseService {
       customers[cIdx].addresses[0].is_default = true;
     }
 
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
-    localStorage.setItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
+    supabaseDeleteAddress(addressId).catch(() => {});
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
     notifyDataChanged();
     return true;
   }
@@ -2285,7 +2402,7 @@ class DatabaseService {
   // ===================== ADMIN AUTH =====================
   getCurrentAdmin(): AdminUser | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_ADMIN);
+      const data = this.getStorageItem(STORAGE_KEYS.CURRENT_ADMIN);
       return data ? JSON.parse(data) : null;
     } catch {
       return null;
@@ -2308,7 +2425,7 @@ class DatabaseService {
         role: 'super_admin',
         status: 'ACTIVE',
       };
-      localStorage.setItem(STORAGE_KEYS.CURRENT_ADMIN, JSON.stringify(admin));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_ADMIN, JSON.stringify(admin));
       notifyDataChanged();
       return { success: true, admin };
     }
@@ -2320,8 +2437,8 @@ class DatabaseService {
   }
 
   adminLogout() {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_ADMIN);
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+    this.removeStorageItem(STORAGE_KEYS.CURRENT_ADMIN);
+    this.removeStorageItem(STORAGE_KEYS.AUTH_SESSION);
     notifyDataChanged();
   }
 
@@ -2333,7 +2450,7 @@ class DatabaseService {
   getCart(customerId?: string): { items: any[]; subtotal: number; total_discount: number; delivery_charge: number; total: number } {
     try {
       const key = this.getCartKey(customerId);
-      const data = localStorage.getItem(key);
+      const data = this.getStorageItem(key);
       const items = data ? JSON.parse(data) : [];
       const settings = this.getSettings();
 
@@ -2408,7 +2525,7 @@ class DatabaseService {
       });
     }
 
-    localStorage.setItem(key, JSON.stringify(items));
+    this.setStorageItem(key, JSON.stringify(items));
     notifyDataChanged();
     return { success: true, cart: this.getCart(customerId) };
   }
@@ -2442,7 +2559,7 @@ class DatabaseService {
       }
     }
 
-    localStorage.setItem(key, JSON.stringify(items));
+    this.setStorageItem(key, JSON.stringify(items));
     notifyDataChanged();
     return { success: true, cart: this.getCart(customerId) };
   }
@@ -2453,7 +2570,7 @@ class DatabaseService {
 
   clearCart(customerId?: string) {
     const key = this.getCartKey(customerId);
-    localStorage.removeItem(key);
+    this.removeStorageItem(key);
     notifyDataChanged();
   }
 
@@ -2465,18 +2582,18 @@ class DatabaseService {
   getWishlist(customerId?: string): WishlistItem[] {
     try {
       const key = this.getWishlistKey(customerId);
-      const data = localStorage.getItem(key);
+      const data = this.getStorageItem(key);
       let items: WishlistItem[] = data ? JSON.parse(data) : [];
 
       // If customer is logged in and their wishlist is empty, check if they had items in guest wishlist
       if (customerId && items.length === 0) {
-        const guestData = localStorage.getItem(this.getWishlistKey(undefined));
+        const guestData = this.getStorageItem(this.getWishlistKey(undefined));
         if (guestData) {
           const guestItems: WishlistItem[] = JSON.parse(guestData);
           if (guestItems.length > 0) {
             items = guestItems.map((it) => ({ ...it, customer_id: customerId }));
-            localStorage.setItem(key, JSON.stringify(items));
-            localStorage.removeItem(this.getWishlistKey(undefined));
+            this.setStorageItem(key, JSON.stringify(items));
+            this.removeStorageItem(this.getWishlistKey(undefined));
           }
         }
       }
@@ -2510,7 +2627,7 @@ class DatabaseService {
     );
 
     if (items.length !== initialLen) {
-      localStorage.setItem(key, JSON.stringify(items));
+      this.setStorageItem(key, JSON.stringify(items));
       notifyDataChanged();
       return true;
     }
@@ -2518,7 +2635,7 @@ class DatabaseService {
     // Also check guest wishlist if customerId was provided
     if (customerId) {
       const guestKey = this.getWishlistKey(undefined);
-      const guestData = localStorage.getItem(guestKey);
+      const guestData = this.getStorageItem(guestKey);
       if (guestData) {
         let guestItems: WishlistItem[] = JSON.parse(guestData);
         const guestLen = guestItems.length;
@@ -2529,7 +2646,7 @@ class DatabaseService {
             item.product?.id !== productIdOrWishId
         );
         if (guestItems.length !== guestLen) {
-          localStorage.setItem(guestKey, JSON.stringify(guestItems));
+          this.setStorageItem(guestKey, JSON.stringify(guestItems));
           notifyDataChanged();
           return true;
         }
@@ -2557,7 +2674,7 @@ class DatabaseService {
           item.id !== targetId &&
           item.product?.id !== targetId
       );
-      localStorage.setItem(key, JSON.stringify(items));
+      this.setStorageItem(key, JSON.stringify(items));
       notifyDataChanged();
       return false; // removed
     } else {
@@ -2573,7 +2690,7 @@ class DatabaseService {
         product: fullProd,
         added_at: new Date().toISOString(),
       });
-      localStorage.setItem(key, JSON.stringify(items));
+      this.setStorageItem(key, JSON.stringify(items));
       notifyDataChanged();
       return true; // added
     }
@@ -2581,9 +2698,9 @@ class DatabaseService {
 
   clearWishlist(customerId?: string): void {
     const key = this.getWishlistKey(customerId);
-    localStorage.removeItem(key);
+    this.removeStorageItem(key);
     if (customerId) {
-      localStorage.removeItem(this.getWishlistKey(undefined));
+      this.removeStorageItem(this.getWishlistKey(undefined));
     }
     notifyDataChanged();
   }
@@ -2591,7 +2708,7 @@ class DatabaseService {
   // ===================== ORDERS =====================
   getOrders(filters?: { customerId?: string; status?: string; search?: string }): Order[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
+      const data = this.getStorageItem(STORAGE_KEYS.ORDERS);
       let list: Order[] = data ? JSON.parse(data) : [];
 
       if (filters?.customerId) {
@@ -2770,12 +2887,13 @@ class DatabaseService {
         }
       });
       if (updatedReturns) {
-        localStorage.setItem(STORAGE_KEYS.RETURNS, JSON.stringify(allReturns));
+        this.setStorageItem(STORAGE_KEYS.RETURNS, JSON.stringify(allReturns));
       }
     }
 
     orders.unshift(newOrder);
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    supabaseSaveOrder(newOrder).catch(() => {});
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
 
     // Decrement stock for ordered products & record ORDER_STOCK_OUT
     orderData.items.forEach((item) => {
@@ -2814,7 +2932,7 @@ class DatabaseService {
           order_id: orderIdStr,
         };
         transactions.unshift(newTx);
-        localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
+        this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
 
         if (prod.shopkeeper_id) {
           this.recalculateShopkeeperStats(prod.shopkeeper_id);
@@ -2829,8 +2947,8 @@ class DatabaseService {
       customers[cIdx].total_orders += 1;
       customers[cIdx].total_spent += total;
       customers[cIdx].last_order_at = new Date().toISOString();
-      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
-      localStorage.setItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
+      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
     }
 
     // Clear cart for this customer
@@ -2838,6 +2956,24 @@ class DatabaseService {
 
     notifyDataChanged();
     return newOrder;
+  }
+
+  updateOrderShipping(orderId: string, trackingNumber: string, courierPartner?: string): Order | null {
+    const orders = this.getOrders();
+    const idx = orders.findIndex((o) => o.order_id === orderId || o.id === orderId);
+    if (idx === -1) return null;
+
+    orders[idx].tracking_number = trackingNumber;
+    if (courierPartner) {
+      orders[idx].courier_partner = courierPartner;
+    }
+    orders[idx].updated_at = new Date().toISOString();
+
+    supabaseUpdateOrderShipping(orders[idx].order_id, trackingNumber, courierPartner).catch(() => {});
+
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    notifyDataChanged();
+    return orders[idx];
   }
 
   updateOrderStatus(orderId: string, newStatus: OrderStatus, changedBy = 'Admin', notes?: string): Order | null {
@@ -2891,7 +3027,8 @@ class DatabaseService {
       }
     }
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    supabaseUpdateOrderStatus(orders[idx].order_id, newStatus, changedBy, notes).catch(() => {});
     notifyDataChanged();
     return orders[idx];
   }
@@ -2912,7 +3049,7 @@ class DatabaseService {
       notes: notes || `Payment status updated to ${paymentStatus}`,
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -2931,7 +3068,7 @@ class DatabaseService {
       notes: noteText,
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -2975,7 +3112,7 @@ class DatabaseService {
       notes: `Entire order cancelled: ${reason}. Inventory restocked.`,
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return order;
   }
@@ -3076,7 +3213,7 @@ class DatabaseService {
       notes: `Item cancelled: ${item.product_name} (${item.size}, ${item.color} x${item.quantity}). Stock restored.${allCancelled ? ' Entire order cancelled.' : ''}`,
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return order;
   }
@@ -3093,7 +3230,7 @@ class DatabaseService {
     item.item_status = newStatus;
     order.updated_at = new Date().toISOString();
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return order;
   }
@@ -3401,7 +3538,7 @@ class DatabaseService {
       notes: `Final Bill generated & locked: Delivered ${calc.total_delivered_quantity} items, RETURN ${calc.total_returned_quantity} items${replaceNotes}, Final Kept ${calc.total_final_quantity} items. Original Total ₹${calc.original_total.toLocaleString('en-IN')}, Less: RETURN -₹${calc.total_return_amount.toLocaleString('en-IN')}, Final Payable ₹${calc.final_payable.toLocaleString('en-IN')}. All actions locked.`,
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return order;
   }
@@ -3409,7 +3546,7 @@ class DatabaseService {
   // ===================== DELIVERY BOY FLEET MANAGEMENT =====================
   getDeliveryBoys(): DeliveryBoy[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.DELIVERY_BOYS);
+      const data = this.getStorageItem(STORAGE_KEYS.DELIVERY_BOYS);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -3442,7 +3579,7 @@ class DatabaseService {
     };
 
     all.push(newBoy);
-    localStorage.setItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
     notifyDataChanged();
     return newBoy;
   }
@@ -3453,12 +3590,12 @@ class DatabaseService {
     if (idx === -1) return null;
 
     all[idx] = { ...all[idx], ...updates };
-    localStorage.setItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
 
     // Update current delivery boy session if same
     const current = this.getCurrentDeliveryBoy();
     if (current && (current.id === id || current.delivery_boy_id === id)) {
-      localStorage.setItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(all[idx]));
+      this.setStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(all[idx]));
     }
 
     notifyDataChanged();
@@ -3471,7 +3608,7 @@ class DatabaseService {
     all = all.filter((d) => d.id !== id && d.delivery_boy_id !== id);
     if (all.length === initialLen) return false;
 
-    localStorage.setItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
+    this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
     notifyDataChanged();
     return true;
   }
@@ -3479,7 +3616,7 @@ class DatabaseService {
   // Delivery Boy Authentication
   getCurrentDeliveryBoy(): DeliveryBoy | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY);
+      const data = this.getStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY);
       return data ? JSON.parse(data) : null;
     } catch {
       return null;
@@ -3506,14 +3643,14 @@ class DatabaseService {
       return { success: false, error: 'This delivery partner account is currently marked as Inactive. Please contact Admin.' };
     }
 
-    localStorage.setItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(boy));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(boy));
     notifyDataChanged();
     return { success: true, deliveryBoy: boy };
   }
 
   deliveryBoyLogout(): void {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY);
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
+    this.removeStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY);
+    this.removeStorageItem(STORAGE_KEYS.AUTH_SESSION);
     notifyDataChanged();
   }
 
@@ -3624,12 +3761,12 @@ class DatabaseService {
           }
         }
       });
-      localStorage.setItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(allBoys));
+      this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(allBoys));
     } catch (err) {
       console.error('Error syncing delivery boys', err);
     }
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -3671,13 +3808,13 @@ class DatabaseService {
             b.assigned_orders = b.assigned_orders.filter((oid) => oid !== orders[idx].order_id);
           }
         });
-        localStorage.setItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(allBoys));
+        this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(allBoys));
       } catch (err) {
         console.error('Error unassigning delivery boy', err);
       }
     }
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -3718,7 +3855,7 @@ class DatabaseService {
       notes: 'Out for delivery. The package is on its way to customer door.',
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -3794,7 +3931,7 @@ class DatabaseService {
       });
     }
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -3818,7 +3955,7 @@ class DatabaseService {
       notes: `Try at Home window closed. ${reason}`,
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -3848,7 +3985,7 @@ class DatabaseService {
       notes: `Try at Home timer extended by ${additionalMinutes} minutes.`,
     });
 
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
     return orders[idx];
   }
@@ -4005,7 +4142,7 @@ class DatabaseService {
       refreshed[rIdx].try_at_home_status = 'CLOSED';
       refreshed[rIdx].try_at_home_closed_at = new Date().toISOString();
       refreshed[rIdx].try_at_home_decision_notes = '30-minute trial expired: All items automatically returned and Final Bill locked.';
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(refreshed));
+      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(refreshed));
     }
 
     // Generate Final Bill and Permanently Lock All Actions
@@ -4018,7 +4155,7 @@ class DatabaseService {
   // ===================== PRODUCT RETURNS =====================
   getProductReturns(): ProductReturn[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.RETURNS);
+      const data = this.getStorageItem(STORAGE_KEYS.RETURNS);
       if (!data) return [];
       return JSON.parse(data);
     } catch {
@@ -4198,7 +4335,7 @@ class DatabaseService {
         if (!boys[bIdx].assigned_orders) boys[bIdx].assigned_orders = [];
         if (!boys[bIdx].assigned_orders.includes(order.order_id)) {
           boys[bIdx].assigned_orders.push(order.order_id);
-          localStorage.setItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(boys));
+          this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(boys));
         }
       }
     }
@@ -4305,8 +4442,8 @@ class DatabaseService {
     });
 
     returns.unshift(newReturn);
-    localStorage.setItem(STORAGE_KEYS.RETURNS, JSON.stringify(returns));
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.setStorageItem(STORAGE_KEYS.RETURNS, JSON.stringify(returns));
+    this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
 
     notifyDataChanged();
     return newReturn;
@@ -4469,7 +4606,7 @@ class DatabaseService {
             order_id: ret.order_id,
           };
           transactions.unshift(newTx);
-          localStorage.setItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
+          this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(transactions));
 
           if (prod.shopkeeper_id) {
             this.recalculateShopkeeperStats(prod.shopkeeper_id);
@@ -4520,10 +4657,10 @@ class DatabaseService {
           ? `Delivery associate completed replace item exchange for "${ret.product_name}" (Qty: ${ret.quantity}). Remark: "${finalRemark}". Replace item only shown, bill unchanged.`
           : `Delivery associate confirmed return for "${ret.product_name}" (Qty: ${ret.quantity}). Remark: "${finalRemark}". Restored stock (+${ret.quantity}).`,
       });
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     }
 
-    localStorage.setItem(STORAGE_KEYS.RETURNS, JSON.stringify(returns));
+    this.setStorageItem(STORAGE_KEYS.RETURNS, JSON.stringify(returns));
     notifyDataChanged();
     return ret;
   }
@@ -4548,7 +4685,7 @@ class DatabaseService {
   // ===================== INVENTORY AUDIT LOGS =====================
   getInventoryLogs(): InventoryTransaction[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.INVENTORY_LOGS);
+      const data = this.getStorageItem(STORAGE_KEYS.INVENTORY_LOGS);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -4563,7 +4700,7 @@ class DatabaseService {
       timestamp: new Date().toISOString(),
     };
     logs.unshift(newLog);
-    localStorage.setItem(STORAGE_KEYS.INVENTORY_LOGS, JSON.stringify(logs));
+    this.setStorageItem(STORAGE_KEYS.INVENTORY_LOGS, JSON.stringify(logs));
     return newLog;
   }
 
@@ -5075,10 +5212,10 @@ class DatabaseService {
 
   // Reset/Seed demo data helper
   resetToDemoData() {
-    localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
-    localStorage.removeItem(STORAGE_KEYS.CATEGORIES);
-    localStorage.removeItem(STORAGE_KEYS.ORDERS);
-    localStorage.removeItem(STORAGE_KEYS.CUSTOMERS);
+    this.removeStorageItem(STORAGE_KEYS.PRODUCTS);
+    this.removeStorageItem(STORAGE_KEYS.CATEGORIES);
+    this.removeStorageItem(STORAGE_KEYS.ORDERS);
+    this.removeStorageItem(STORAGE_KEYS.CUSTOMERS);
     this.initDatabase();
     notifyDataChanged();
   }

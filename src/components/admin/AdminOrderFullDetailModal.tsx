@@ -125,13 +125,7 @@ export const AdminOrderFullDetailModal: React.FC<AdminOrderFullDetailModalProps>
     );
 
     if (trackingNumber.trim()) {
-      const allOrders = db.getOrders();
-      const idx = allOrders.findIndex((o) => o.order_id === order.order_id);
-      if (idx !== -1) {
-        allOrders[idx].tracking_number = trackingNumber.trim();
-        allOrders[idx].courier_partner = courierPartner;
-        localStorage.setItem('style1_orders', JSON.stringify(allOrders));
-      }
+      db.updateOrderShipping(order.order_id, trackingNumber.trim(), courierPartner);
     }
 
     setStatusNotes('');

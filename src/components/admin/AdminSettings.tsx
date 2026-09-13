@@ -10,8 +10,15 @@ import {
   AlertTriangle,
   Clock,
   Sparkles,
+  MessageSquare,
+  Key,
+  Smartphone,
+  Send,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { db } from '../../services/db';
+import { OtpService } from '../../services/otpService';
 
 interface AdminSettingsProps {
   onCatalogReset: () => void;
@@ -21,6 +28,34 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onCatalogReset }) 
   const [settings, setSettings] = useState(db.getSettings());
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [showTokens, setShowTokens] = useState(false);
+  const [testMobile, setTestMobile] = useState('');
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+
+  const handleTestSms = async () => {
+    if (!testMobile || testMobile.replace(/\D/g, '').length < 10) {
+      alert('Please enter a valid 10-digit mobile number for test SMS');
+      return;
+    }
+    setIsSendingTest(true);
+    setTestResult(null);
+    try {
+      const demoOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const res = await OtpService.sendOtp(testMobile, demoOtp);
+      setTestResult({
+        success: res.success,
+        message: `${res.message} (Test OTP: ${demoOtp})`,
+      });
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: err?.message || 'Failed to trigger test SMS',
+      });
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -353,6 +388,190 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onCatalogReset }) 
                 </span>
               </div>
             </label>
+          </div>
+        </div>
+
+        {/* SMS & Twilio Gateway Configuration */}
+        <div id="admin-sms-settings-card" className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold">
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-sm text-slate-900">SMS Gateway & OTP Provider Settings</h2>
+                <p className="text-[11px] text-slate-500">
+                  Subabase database me saved demo credentials. Bad me real Twilio / SMS provider change kar sakte hain.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTokens(!showTokens)}
+              className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+            >
+              {showTokens ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>{showTokens ? 'Hide Keys' : 'Reveal Keys'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* SMS Provider Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                SMS Provider
+              </label>
+              <select
+                value={settings.sms_provider || 'demo'}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    sms_provider: e.target.value as 'demo' | 'twilio' | 'fast2sms' | 'msg91',
+                  })
+                }
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+              >
+                <option value="demo">Demo SMS Gateway (Free / Pre-configured in Subabase)</option>
+                <option value="twilio">Twilio SMS (International / India)</option>
+                <option value="fast2sms">Fast2SMS (India Quick OTP)</option>
+                <option value="msg91">MSG91 (Enterprise SMS & OTP)</option>
+              </select>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Demo mode me OTP instant simulated gateway se send aur log hota hai without extra charges.
+              </p>
+            </div>
+
+            {/* SMS Sender ID */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                SMS Sender ID / Header
+              </label>
+              <input
+                type="text"
+                value={settings.sms_sender_id || 'TRYHOM'}
+                onChange={(e) => setSettings({ ...settings, sms_sender_id: e.target.value })}
+                placeholder="e.g. TRYHOM"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                6-character alphanumeric DLT sender ID for transactional SMS (Default: TRYHOM)
+              </p>
+            </div>
+
+            {/* SMS API Key */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                <span>SMS API Key</span>
+                <span className="text-[10px] font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Subabase Sync Active
+                </span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showTokens ? 'text' : 'password'}
+                  value={settings.sms_api_key || ''}
+                  onChange={(e) => setSettings({ ...settings, sms_api_key: e.target.value })}
+                  placeholder="e.g. DEMO_KEY_TRYATHOME_SMS_2026 or your live API key"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                />
+                <Key className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Twilio Account SID */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Twilio Account SID
+              </label>
+              <input
+                type={showTokens ? 'text' : 'password'}
+                value={settings.twilio_account_sid || ''}
+                onChange={(e) => setSettings({ ...settings, twilio_account_sid: e.target.value })}
+                placeholder="e.g. AC_DEMO_TWILIO_ACCOUNT_SID_SUBABASE"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+              />
+            </div>
+
+            {/* Twilio Auth Token */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Twilio Auth Token
+              </label>
+              <input
+                type={showTokens ? 'text' : 'password'}
+                value={settings.twilio_auth_token || ''}
+                onChange={(e) => setSettings({ ...settings, twilio_auth_token: e.target.value })}
+                placeholder="e.g. AUTH_DEMO_TWILIO_SECRET_TOKEN"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+              />
+            </div>
+
+            {/* Twilio From Phone */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Twilio From Phone Number
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={settings.twilio_from_phone || ''}
+                  onChange={(e) => setSettings({ ...settings, twilio_from_phone: e.target.value })}
+                  placeholder="e.g. +18005550199 or +91..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                />
+                <Smartphone className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+
+          {/* Test SMS Quick Dispatch */}
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Send className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-extrabold text-slate-800">Test SMS Gateway Live</span>
+              </div>
+              <span className="text-[10px] text-slate-500">
+                Active Provider: <strong className="text-slate-700 uppercase">{settings.sms_provider || 'demo'}</strong>
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="tel"
+                value={testMobile}
+                onChange={(e) => setTestMobile(e.target.value)}
+                placeholder="Enter 10-digit mobile number (e.g. 9876543210)"
+                maxLength={10}
+                className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={handleTestSms}
+                disabled={isSendingTest}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Send className={`w-3.5 h-3.5 ${isSendingTest ? 'animate-pulse' : ''}`} />
+                <span>{isSendingTest ? 'Dispatching...' : 'Send Test OTP'}</span>
+              </button>
+            </div>
+
+            {testResult && (
+              <div
+                className={`p-2.5 rounded-lg text-xs font-medium flex items-center gap-2 ${
+                  testResult.success
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border border-rose-200 text-rose-800'
+                }`}
+              >
+                {testResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{testResult.message}</span>
+              </div>
+            )}
           </div>
         </div>
 

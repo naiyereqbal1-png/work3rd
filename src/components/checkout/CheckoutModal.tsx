@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   MapPin,
@@ -67,6 +67,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isAddingNewAddress, setIsAddingNewAddress] = useState(
     addresses.length === 0
   );
+
+  // Synchronize selected address when customer addresses change
+  useEffect(() => {
+    if (addresses.length > 0) {
+      if (!selectedAddressId || !addresses.some((a) => a.id === selectedAddressId)) {
+        const defaultAddr = addresses.find((a) => a.is_default) || addresses[0];
+        if (defaultAddr) {
+          setSelectedAddressId(defaultAddr.id);
+          setIsAddingNewAddress(false);
+        }
+      }
+    } else {
+      setIsAddingNewAddress(true);
+    }
+  }, [addresses.length, currentCustomer?.customer_id]);
   const [paymentOption, setPaymentOption] = useState<'UPI' | 'COD' | 'TRY_AT_HOME'>(
     initialOrderType === 'try_at_home' ? 'TRY_AT_HOME' : 'COD'
   );
@@ -233,10 +248,35 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
-    // Get selected address
-    const selectedAddr = currentCustomer.addresses.find((a) => a.id === selectedAddressId);
-    if (!selectedAddr) {
-      setCheckoutError('Please select or add a delivery address to proceed.');
+    // Resolve or auto-save address
+    let activeAddress = currentCustomer.addresses.find((a) => a.id === selectedAddressId);
+
+    // If user was actively typing a new address in the form, auto-save it on order confirmation
+    if (!activeAddress && isAddingNewAddress && newName.trim() && newMobile.trim() && newPincode.trim() && newAddress.trim()) {
+      const autoSaved = db.saveCustomerAddress({
+        name: newName.trim(),
+        mobile: newMobile.trim(),
+        pincode: newPincode.trim(),
+        address: newAddress.trim(),
+        city: newCity.trim(),
+        state: newState.trim(),
+        landmark: newLandmark.trim(),
+        address_type: newType,
+        is_default: true,
+      }, editingAddressIdInCheckout || undefined);
+      if (autoSaved) {
+        activeAddress = autoSaved;
+        setSelectedAddressId(autoSaved.id);
+        setIsAddingNewAddress(false);
+      }
+    }
+
+    if (!activeAddress) {
+      activeAddress = currentCustomer.addresses.find((a) => a.is_default) || currentCustomer.addresses[0];
+    }
+
+    if (!activeAddress) {
+      setCheckoutError('Please enter and save a delivery address to proceed.');
       setIsAddingNewAddress(true);
       return;
     }
@@ -255,7 +295,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         const order = db.createOrder({
           customer: currentCustomer,
-          address: selectedAddr,
+          address: activeAddress!,
           items: checkoutItems,
           payment_method: effectiveMethod,
           payment_status: effectiveMethod === 'ONLINE_RAZORPAY' ? 'PAID' : 'PENDING',

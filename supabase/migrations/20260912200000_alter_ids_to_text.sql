@@ -109,17 +109,22 @@ VALUES
   ('prod-test-10', 'TEST-SKU-10', 'TEST-PRODUCT-10 Winter Jacket', 'test-product-10', 'cat-winter', 'Winter Wear', 'Unisex', 'Test Lightweight Warm Puffer Jacket', 'Wildcraft', 4999.00, 2999.00, 'Published', 15, '{"S","M","L","XL"}', '{"Black","Navy"}', '{"jacket","winter"}', 'TEST-SHOPKEEPER-10', 'Rohan Mehta', 'APPROVED', true)
 ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name, mrp = EXCLUDED.mrp, selling_price = EXCLUDED.selling_price;
 
--- Seed product images to verify rendering in portals
-INSERT INTO product_images (product_id, image_url, sort_order, is_primary)
-VALUES
-  ('prod-test-1', 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&q=80', 1, true),
-  ('prod-test-2', 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=400&q=80', 1, true),
-  ('prod-test-3', 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=400&q=80', 1, true),
-  ('prod-test-4', 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=400&q=80', 1, true),
-  ('prod-test-5', 'https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=400&q=80', 1, true),
-  ('prod-test-6', 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=400&q=80', 1, true),
-  ('prod-test-7', 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80', 1, true),
-  ('prod-test-8', 'https://images.unsplash.com/photo-1552346154-21d32810aba3?w=400&q=80', 1, true),
-  ('prod-test-9', 'https://images.unsplash.com/photo-1621452773781-0f992fd1f5cb?w=400&q=80', 1, true),
-  ('prod-test-10', 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=400&q=80', 1, true)
-ON CONFLICT DO NOTHING;
+-- 15. Ensure store_settings contains configurable SMS and Twilio provider columns
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS sms_provider TEXT DEFAULT 'demo';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS sms_api_key TEXT DEFAULT 'DEMO_KEY_TRYATHOME_SMS_2026';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS sms_sender_id TEXT DEFAULT 'TRYHOM';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS twilio_account_sid TEXT DEFAULT 'AC_DEMO_TWILIO_ACCOUNT_SID_SUBABASE';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS twilio_auth_token TEXT DEFAULT 'AUTH_DEMO_TWILIO_SECRET_TOKEN';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS twilio_from_phone TEXT DEFAULT '+18005550199';
+
+-- Update the primary row with demo defaults if not set
+UPDATE store_settings
+SET 
+  sms_provider = COALESCE(sms_provider, 'demo'),
+  sms_api_key = COALESCE(sms_api_key, 'DEMO_KEY_TRYATHOME_SMS_2026'),
+  sms_sender_id = COALESCE(sms_sender_id, 'TRYHOM'),
+  twilio_account_sid = COALESCE(twilio_account_sid, 'AC_DEMO_TWILIO_ACCOUNT_SID_SUBABASE'),
+  twilio_auth_token = COALESCE(twilio_auth_token, 'AUTH_DEMO_TWILIO_SECRET_TOKEN'),
+  twilio_from_phone = COALESCE(twilio_from_phone, '+18005550199')
+WHERE id = 1;
+

@@ -251,13 +251,7 @@ export const AdminOrders: React.FC = () => {
     );
 
     if (trackingNumber.trim()) {
-      const allOrders = db.getOrders();
-      const idx = allOrders.findIndex((o) => o.order_id === selectedOrder.order_id);
-      if (idx !== -1) {
-        allOrders[idx].tracking_number = trackingNumber.trim();
-        allOrders[idx].courier_partner = courierPartner;
-        localStorage.setItem('style1_orders', JSON.stringify(allOrders));
-      }
+      db.updateOrderShipping(selectedOrder.order_id, trackingNumber.trim(), courierPartner);
     }
 
     refreshOrders();
