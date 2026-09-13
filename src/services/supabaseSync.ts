@@ -603,10 +603,53 @@ export async function supabaseSaveProduct(product: Product): Promise<boolean> {
 
 export async function supabaseUpdateProduct(id: string, updates: Partial<Product>): Promise<boolean> {
   try {
-    const { error } = await supabase.from("products").update({
-      ...updates,
+    const VALID_PRODUCT_COLUMNS = [
+      "sku",
+      "name",
+      "slug",
+      "category_id",
+      "category_name",
+      "category_slug",
+      "subcategory_id",
+      "subcategory_name",
+      "gender",
+      "description",
+      "brand",
+      "mrp",
+      "selling_price",
+      "admin_selling_price",
+      "shopkeeper_price",
+      "discount_percentage",
+      "stock",
+      "status",
+      "rating",
+      "rating_count",
+      "sizes",
+      "colors",
+      "tags",
+      "specifications",
+      "shopkeeper_id",
+      "shopkeeper_name",
+      "approval_status",
+      "rejection_reason",
+      "is_live",
+    ];
+
+    const cleanUpdates: any = {
       updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    };
+
+    for (const key of VALID_PRODUCT_COLUMNS) {
+      if (updates[key as keyof Product] !== undefined) {
+        cleanUpdates[key] = updates[key as keyof Product];
+      }
+    }
+
+    const { error } = await supabase
+      .from("products")
+      .update(cleanUpdates)
+      .eq("id", id);
+
     if (error) {
       return handleSupabaseError("products", "update product", error);
     }

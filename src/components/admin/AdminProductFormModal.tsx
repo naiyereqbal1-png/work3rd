@@ -57,17 +57,21 @@ export const AdminProductFormModal: React.FC<AdminProductFormModalProps> = ({
 
   useEffect(() => {
     if (productToEdit) {
-      setName(productToEdit.name);
-      setSku(productToEdit.sku);
-      setCategoryId(productToEdit.category_id);
-      setGender(productToEdit.gender);
-      setBrand(productToEdit.brand);
-      setDescription(productToEdit.description);
-      setMrp(productToEdit.mrp);
-      setSellingPrice(productToEdit.selling_price);
-      setShopkeeperPrice(productToEdit.shopkeeper_price !== undefined ? productToEdit.shopkeeper_price : productToEdit.selling_price);
-      setStock(productToEdit.stock);
-      setStatus(productToEdit.status);
+      setName(productToEdit.name || '');
+      setSku(productToEdit.sku || '');
+      setCategoryId(productToEdit.category_id || '');
+      setGender(productToEdit.gender || 'Men');
+      setBrand(productToEdit.brand || '');
+      setDescription(productToEdit.description || '');
+      setMrp(productToEdit.mrp !== undefined && productToEdit.mrp !== null ? productToEdit.mrp : 0);
+      setSellingPrice(productToEdit.selling_price !== undefined && productToEdit.selling_price !== null ? productToEdit.selling_price : 0);
+      setShopkeeperPrice(
+        productToEdit.shopkeeper_price !== undefined && productToEdit.shopkeeper_price !== null
+          ? productToEdit.shopkeeper_price
+          : (productToEdit.selling_price !== undefined && productToEdit.selling_price !== null ? productToEdit.selling_price : 0)
+      );
+      setStock(productToEdit.stock !== undefined && productToEdit.stock !== null ? productToEdit.stock : 0);
+      setStatus(productToEdit.status || 'Published');
       setSizes(productToEdit.sizes || []);
       setColors(productToEdit.colors || []);
       setImages(productToEdit.images || []);
