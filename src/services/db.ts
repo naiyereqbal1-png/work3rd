@@ -987,6 +987,10 @@ class DatabaseService {
     const all = this.getAllProducts();
     let filtered = all.filter((p) => {
       if (p.shopkeeper_id) {
+        const sk = this.getShopkeeperById(p.shopkeeper_id);
+        if (sk && sk.status !== 'ACTIVE') {
+          return false;
+        }
         return (
           p.approval_status === 'APPROVED' &&
           p.is_live === true &&
@@ -1687,13 +1691,17 @@ class DatabaseService {
     const idx = shopkeepers.findIndex((s) => s.id === shopkeeperId || s.shopkeeper_id === shopkeeperId);
     if (idx === -1) return;
 
-    const products = this.getShopkeeperProducts(shopkeepers[idx].id);
-    const liveCount = products.filter(
-      (p) => p.approval_status === 'APPROVED' && p.is_live === true && p.status === 'Published'
-    ).length;
+    const shop = shopkeepers[idx];
+    const products = this.getShopkeeperProducts(shop.id);
+    const isPartnerActive = shop.status === 'ACTIVE';
+    const liveCount = isPartnerActive
+      ? products.filter(
+          (p) => p.approval_status === 'APPROVED' && p.is_live === true && (p.stock || 0) > 0
+        ).length
+      : 0;
     const pendingCount = products.filter((p) => p.approval_status === 'PENDING').length;
     const totalStock = products.reduce((acc, p) => acc + (p.stock || 0), 0);
-    const orders = this.getShopkeeperOrders(shopkeepers[idx].id);
+    const orders = this.getShopkeeperOrders(shop.id);
 
     shopkeepers[idx].total_products = products.length;
     shopkeepers[idx].live_products = liveCount;
@@ -1888,12 +1896,14 @@ class DatabaseService {
   ): Product {
     const prod = this.getProductById(productId);
     if (!prod) throw new Error('Product not found.');
-    if (prod.shopkeeper_id !== shopkeeperId) {
-      throw new Error('Access denied: You do not own this product.');
-    }
 
     const shopkeeper = this.getShopkeeperById(shopkeeperId);
     if (!shopkeeper) throw new Error('Shopkeeper not found.');
+
+    const validIds = new Set<string>([shopkeeperId, shopkeeper.id, shopkeeper.shopkeeper_id].filter(Boolean) as string[]);
+    if (!prod.shopkeeper_id || !validIds.has(prod.shopkeeper_id)) {
+      throw new Error('Access denied: You do not own this product.');
+    }
 
     const cleanUpdates: Partial<Product> = { ...updates };
     if (!shopkeeper.permissions.can_edit_price) {
@@ -2049,7 +2059,13 @@ class DatabaseService {
 
   getShopkeeperStockTransactions(shopkeeperId: string): StockTransaction[] {
     const all = this.getStockTransactions();
-    return all.filter((stx) => stx.shopkeeper_id === shopkeeperId);
+    const sk = this.getShopkeeperById(shopkeeperId);
+    const validIds = new Set<string>([shopkeeperId]);
+    if (sk) {
+      if (sk.id) validIds.add(sk.id);
+      if (sk.shopkeeper_id) validIds.add(sk.shopkeeper_id);
+    }
+    return all.filter((stx) => stx.shopkeeper_id && validIds.has(stx.shopkeeper_id));
   }
 
   performStockIn(params: {
@@ -2071,7 +2087,8 @@ class DatabaseService {
       if (!shopkeeper?.permissions.can_stock_in) {
         throw new Error('Permission denied: You do not have permission to perform Stock IN.');
       }
-      if (prod.shopkeeper_id !== params.performedBy.id) {
+      const validIds = new Set<string>([params.performedBy.id, shopkeeper.id, shopkeeper.shopkeeper_id].filter(Boolean) as string[]);
+      if (!prod.shopkeeper_id || !validIds.has(prod.shopkeeper_id)) {
         throw new Error('Access denied: You can only perform Stock IN on your own products.');
       }
     }
@@ -2138,7 +2155,8 @@ class DatabaseService {
       if (!shopkeeper?.permissions.can_stock_out) {
         throw new Error('Permission denied: You do not have permission to perform Stock OUT.');
       }
-      if (prod.shopkeeper_id !== params.performedBy.id) {
+      const validIds = new Set<string>([params.performedBy.id, shopkeeper.id, shopkeeper.shopkeeper_id].filter(Boolean) as string[]);
+      if (!prod.shopkeeper_id || !validIds.has(prod.shopkeeper_id)) {
         throw new Error('Access denied: You can only perform Stock OUT on your own products.');
       }
     }

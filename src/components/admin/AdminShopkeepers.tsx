@@ -152,6 +152,18 @@ export const AdminShopkeepers: React.FC = () => {
     }
   };
 
+  const handleToggleShopkeeperStatus = async (shop: Shopkeeper) => {
+    const newStatus = shop.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await db.updateShopkeeperAsync(shop.id, { status: newStatus });
+      db.recalculateShopkeeperStats(shop.id);
+      setShopkeepers(db.getShopkeepers());
+      setAllProducts(db.getAllProducts());
+    } catch (err: any) {
+      alert(err.message || 'Failed to update partner status.');
+    }
+  };
+
   const filteredShopkeepers = shopkeepers.filter((s) => {
     const q = searchQuery.toLowerCase();
     return (
@@ -164,8 +176,18 @@ export const AdminShopkeepers: React.FC = () => {
   });
 
   const filteredTransactions = transactions.filter((t) => {
-    if (selectedShopkeeperId !== 'ALL' && t.shopkeeper_id !== selectedShopkeeperId) {
-      return false;
+    if (selectedShopkeeperId !== 'ALL') {
+      const selectedShop = shopkeepers.find(
+        (s) => s.id === selectedShopkeeperId || s.shopkeeper_id === selectedShopkeeperId
+      );
+      const validIds = new Set<string>([selectedShopkeeperId]);
+      if (selectedShop) {
+        if (selectedShop.id) validIds.add(selectedShop.id);
+        if (selectedShop.shopkeeper_id) validIds.add(selectedShop.shopkeeper_id);
+      }
+      if (!validIds.has(t.shopkeeper_id)) {
+        return false;
+      }
     }
     return true;
   });
@@ -264,8 +286,12 @@ export const AdminShopkeepers: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredShopkeepers.map((shop) => {
-              const shopProds = allProducts.filter((p) => p.shopkeeper_id === shop.id);
-              const liveCount = shopProds.filter((p) => p.approval_status === 'APPROVED' && p.is_live).length;
+              const validShopIds = new Set<string>([shop.id, shop.shopkeeper_id].filter(Boolean) as string[]);
+              const shopProds = allProducts.filter((p) => p.shopkeeper_id && validShopIds.has(p.shopkeeper_id));
+              const isPartnerActive = shop.status === 'ACTIVE';
+              const liveCount = isPartnerActive
+                ? shopProds.filter((p) => p.approval_status === 'APPROVED' && p.is_live && (p.stock || 0) > 0).length
+                : 0;
               const pendingCount = shopProds.filter((p) => p.approval_status === 'PENDING').length;
               const totalStock = shopProds.reduce((sum, p) => sum + (p.stock || 0), 0);
 
@@ -286,15 +312,28 @@ export const AdminShopkeepers: React.FC = () => {
                           <span>{shop.store_name || 'Retail Partner'}</span>
                         </p>
                       </div>
-                      <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                          shop.status === 'ACTIVE'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-rose-100 text-rose-800'
-                        }`}
-                      >
-                        {shop.status}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            shop.status === 'ACTIVE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {shop.status}
+                        </span>
+                        <button
+                          onClick={() => handleToggleShopkeeperStatus(shop)}
+                          className={`px-2 py-0.5 text-[10px] font-black rounded-md border transition-all cursor-pointer ${
+                            shop.status === 'ACTIVE'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                          title={shop.status === 'ACTIVE' ? 'Deactivate Shopkeeper Partner' : 'Activate Shopkeeper Partner'}
+                        >
+                          {shop.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="text-xs text-slate-600 space-y-1 mb-4">
