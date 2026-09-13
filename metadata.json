@@ -1,0 +1,10 @@
+{
+  "name": "Remix style1 remix 3rd work",
+  "description": "STYLE 1 is a modern Indian fashion and garment e-commerce platform with customer shopping, OTP login, cart, checkout with COD, and comprehensive admin dashboard.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
