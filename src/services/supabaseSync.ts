@@ -268,6 +268,7 @@ export async function pushToSupabase(): Promise<boolean> {
       const customersList = JSON.parse(customersStr) as Customer[];
       if (customersList.length > 0) {
         const customerRows = customersList.map((c) => ({
+          id: c.id,
           customer_id: c.customer_id,
           name: c.name,
           mobile: c.mobile,
@@ -285,6 +286,7 @@ export async function pushToSupabase(): Promise<boolean> {
           if (c.addresses && c.addresses.length > 0) {
             c.addresses.forEach((addr) => {
               addressRows.push({
+                id: addr.id,
                 customer_id: c.customer_id,
                 name: addr.name,
                 mobile: addr.mobile,
@@ -312,6 +314,7 @@ export async function pushToSupabase(): Promise<boolean> {
       const shopkeepersList = JSON.parse(shopkeepersStr) as Shopkeeper[];
       if (shopkeepersList.length > 0) {
         const rows = shopkeepersList.map((s) => ({
+          id: s.id,
           shopkeeper_id: s.shopkeeper_id,
           name: s.name,
           store_name: s.store_name || null,
@@ -375,6 +378,7 @@ export async function pushToSupabase(): Promise<boolean> {
           if (p.images && p.images.length > 0) {
             p.images.forEach((img) => {
               imageRows.push({
+                id: img.id,
                 product_id: p.id,
                 image_url: img.image_url,
                 sort_order: img.sort_order || 0,
@@ -394,6 +398,7 @@ export async function pushToSupabase(): Promise<boolean> {
           if (p.variants && p.variants.length > 0) {
             p.variants.forEach((v) => {
               variantRows.push({
+                id: v.id,
                 product_id: p.id,
                 size: v.size,
                 color: v.color,
@@ -417,6 +422,7 @@ export async function pushToSupabase(): Promise<boolean> {
       const deliveryBoysList = JSON.parse(deliveryBoysStr) as DeliveryBoy[];
       if (deliveryBoysList.length > 0) {
         const rows = deliveryBoysList.map((d) => ({
+          id: d.id,
           delivery_boy_id: d.delivery_boy_id,
           name: d.name,
           mobile: d.mobile,
@@ -440,6 +446,7 @@ export async function pushToSupabase(): Promise<boolean> {
       const ordersList = JSON.parse(ordersStr) as Order[];
       if (ordersList.length > 0) {
         const orderRows = ordersList.map((o) => ({
+          id: o.id,
           order_id: o.order_id,
           invoice_number: o.invoice_number || null,
           customer_id: o.customer_id,
@@ -482,6 +489,7 @@ export async function pushToSupabase(): Promise<boolean> {
           if (o.items && o.items.length > 0) {
             o.items.forEach((item) => {
               itemRows.push({
+                id: item.id,
                 order_id: o.order_id,
                 product_id: item.product_id,
                 product_name: item.product_name,
@@ -530,6 +538,7 @@ export async function pushToSupabase(): Promise<boolean> {
           if (o.status_history && o.status_history.length > 0) {
             o.status_history.forEach((h) => {
               historyRows.push({
+                id: h.id,
                 order_id: o.order_id,
                 status: h.status,
                 changed_by: h.changed_by,
