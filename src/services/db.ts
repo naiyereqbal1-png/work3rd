@@ -31,6 +31,7 @@ import {
 } from '../types';
 import { generateDemoProducts, INITIAL_CATEGORIES } from './demoData';
 import * as XLSX from 'xlsx';
+import { pullFromSupabase, pushToSupabase } from './supabaseSync';
 
 const STORAGE_KEYS = {
   PRODUCTS: 'style1_products',
@@ -81,6 +82,9 @@ export const notifyDataChanged = () => {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('style1_data_changed'));
     broadcastChannel?.postMessage({ type: 'DATA_CHANGED', timestamp: Date.now() });
+    
+    // Non-blocking background push to Supabase to keep live database sync'd
+    pushToSupabase();
   }
 };
 
@@ -94,6 +98,13 @@ class DatabaseService {
         }
       };
     }
+    
+    // Initial fetch from live Supabase DB on application startup
+    pullFromSupabase().then((updated) => {
+      if (updated && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('style1_data_changed'));
+      }
+    });
   }
 
   private initDatabase() {
@@ -2111,6 +2122,11 @@ class DatabaseService {
       expires_at: Date.now() + 5 * 60 * 1000, // 5 mins
     };
     localStorage.setItem(STORAGE_KEYS.ACTIVE_OTP, JSON.stringify(otpPayload));
+
+    // Log the API payload and request in the Demo API Provider Gateway logs
+    import('./otpService').then(({ OtpService }) => {
+      OtpService.sendOtp(cleanMobile, otp);
+    });
 
     return {
       success: true,

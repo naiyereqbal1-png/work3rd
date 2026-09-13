@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { Shopkeeper, Product, StockTransaction, Order, Category, ProductImage } from '../../types';
+import { uploadProductImage } from '../../utils/supabase/storage';
 
 interface ShopkeeperPortalProps {
   shopkeeper: Shopkeeper;
@@ -361,19 +362,20 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
   const permissions = shopkeeper.permissions;
 
   // Image Upload / Camera Handlers
-  const handleImageFiles = (files: FileList | null, isEdit = false) => {
+  const handleImageFiles = async (files: FileList | null, isEdit = false) => {
     if (!files || files.length === 0) return;
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        if (!result) return;
+    
+    for (const file of Array.from(files)) {
+      try {
+        // Upload directly to Supabase storage to get a real CDN URL
+        const cdnUrl = await uploadProductImage(file);
+        
         if (isEdit) {
           setEditProductImages((prev) => {
             if (prev.length >= 5) return prev;
             const newImg: ProductImage = {
               id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              image_url: result,
+              image_url: cdnUrl,
               is_primary: prev.length === 0,
               sort_order: prev.length + 1,
             };
@@ -384,16 +386,17 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
             if (prev.length >= 5) return prev;
             const newImg: ProductImage = {
               id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              image_url: result,
+              image_url: cdnUrl,
               is_primary: prev.length === 0,
               sort_order: prev.length + 1,
             };
             return [...prev, newImg];
           });
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.error("Failed to upload product image to Supabase storage:", err);
+      }
+    }
   };
 
   const setPrimaryImage = (id: string, isEdit = false) => {
