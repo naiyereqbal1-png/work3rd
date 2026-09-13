@@ -58,6 +58,17 @@ import {
   pushToSupabase,
 } from './supabaseSync';
 
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const STORAGE_KEYS = {
   PRODUCTS: 'style1_products',
   CATEGORIES: 'style1_categories',
@@ -164,10 +175,22 @@ class DatabaseService {
       this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cloud.categories));
     }
     if (cloud.products && cloud.products.length > 0) {
-      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(cloud.products));
+      const existing = this.getAllProducts();
+      const cloudIds = new Set(cloud.products.map((p) => p.id));
+      const merged = [...cloud.products];
+      for (const item of existing) {
+        if (!cloudIds.has(item.id)) merged.push(item);
+      }
+      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(merged));
     }
     if (cloud.customers && cloud.customers.length > 0) {
-      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cloud.customers));
+      const existing = this.getCustomers();
+      const cloudIds = new Set(cloud.customers.map((c) => c.id));
+      const merged = [...cloud.customers];
+      for (const item of existing) {
+        if (!cloudIds.has(item.id)) merged.push(item);
+      }
+      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(merged));
       const currentCust = this.getCurrentCustomer();
       if (currentCust) {
         const matched = cloud.customers.find((c) => c.customer_id === currentCust.customer_id || c.id === currentCust.id);
@@ -177,13 +200,31 @@ class DatabaseService {
       }
     }
     if (cloud.orders && cloud.orders.length > 0) {
-      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(cloud.orders));
+      const existing = this.getOrders();
+      const cloudIds = new Set(cloud.orders.map((o) => o.id));
+      const merged = [...cloud.orders];
+      for (const item of existing) {
+        if (!cloudIds.has(item.id)) merged.push(item);
+      }
+      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(merged));
     }
     if (cloud.deliveryBoys && cloud.deliveryBoys.length > 0) {
-      this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(cloud.deliveryBoys));
+      const existing = this.getDeliveryBoys();
+      const cloudIds = new Set(cloud.deliveryBoys.map((d) => d.id));
+      const merged = [...cloud.deliveryBoys];
+      for (const item of existing) {
+        if (!cloudIds.has(item.id)) merged.push(item);
+      }
+      this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(merged));
     }
     if (cloud.shopkeepers && cloud.shopkeepers.length > 0) {
-      this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(cloud.shopkeepers));
+      const existing = this.getShopkeepers();
+      const cloudIds = new Set(cloud.shopkeepers.map((s) => s.id));
+      const merged = [...cloud.shopkeepers];
+      for (const item of existing) {
+        if (!cloudIds.has(item.id)) merged.push(item);
+      }
+      this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(merged));
     }
     if (cloud.returns && cloud.returns.length > 0) {
       this.setStorageItem(STORAGE_KEYS.RETURNS, JSON.stringify(cloud.returns));
@@ -1425,9 +1466,14 @@ class DatabaseService {
       throw new Error(`Mobile number +91 ${cleanMobile} is already registered as ${roleCheck.role}.`);
     }
 
-    const nextIndex = shopkeepers.length + 1;
-    const shopkeeper_id = `STYLE1-SHOP-${String(nextIndex).padStart(6, '0')}`;
-    const id = `shop-${Date.now()}`;
+    const existingNums = shopkeepers.map((s) => {
+      const match = (s.shopkeeper_id || '').match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    });
+    const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : 0;
+    const seqNum = Math.max(shopkeepers.length + 1, maxNum + 1, Math.floor(Math.random() * 899999) + 100000);
+    const shopkeeper_id = `STYLE1-SHOP-${String(seqNum).padStart(6, '0')}`;
+    const id = generateUUID();
 
     const defaultPermissions: ShopkeeperPermissions = {
       can_view_dashboard: true,
@@ -1518,9 +1564,14 @@ class DatabaseService {
       throw new Error(`Mobile number +91 ${cleanMobile} is already registered as ${roleCheck.role}.`);
     }
 
-    const nextIndex = shopkeepers.length + 1;
-    const shopkeeper_id = `STYLE1-SHOP-${String(nextIndex).padStart(6, '0')}`;
-    const id = `shop-${Date.now()}`;
+    const existingNums = shopkeepers.map((s) => {
+      const match = (s.shopkeeper_id || '').match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    });
+    const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : 0;
+    const seqNum = Math.max(shopkeepers.length + 1, maxNum + 1, Math.floor(Math.random() * 899999) + 100000);
+    const shopkeeper_id = `STYLE1-SHOP-${String(seqNum).padStart(6, '0')}`;
+    const id = generateUUID();
 
     const defaultPermissions: ShopkeeperPermissions = {
       can_view_dashboard: true,
@@ -1775,7 +1826,7 @@ class DatabaseService {
       shopkeeper_price: shopkeeperPrice,
       discount_percentage: discount,
       stock: initStock,
-      status: 'Draft',
+      status: 'Published',
       rating: 4.8,
       rating_count: 1,
       sizes: data.sizes && data.sizes.length > 0 ? data.sizes : ['M', 'L', 'XL'],
@@ -1789,10 +1840,10 @@ class DatabaseService {
       images: formattedImages,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      shopkeeper_id: shopkeeper.id,
+      shopkeeper_id: shopkeeper.shopkeeper_id || shopkeeper.id,
       shopkeeper_name: shopkeeper.name,
-      approval_status: 'PENDING',
-      is_live: false,
+      approval_status: 'APPROVED',
+      is_live: true,
     };
 
     all.unshift(newProd);
@@ -1809,7 +1860,7 @@ class DatabaseService {
         product_name: newProd.name,
         sku: newProd.sku,
         category_name: newProd.category_name,
-        shopkeeper_id: shopkeeper.id,
+        shopkeeper_id: shopkeeper.shopkeeper_id || shopkeeper.id,
         shopkeeper_name: shopkeeper.name,
         transaction_type: 'IN',
         quantity: initStock,
@@ -1879,6 +1930,14 @@ class DatabaseService {
     shopkeeperId: string,
     data: any
   ): Promise<Product> {
+    const shopkeeper = this.getShopkeeperById(shopkeeperId);
+    if (shopkeeper) {
+      try {
+        await supabaseSaveShopkeeper(shopkeeper);
+      } catch (err) {
+        console.warn("[Shopkeeper DB] Pre-sync shopkeeper record warning:", err);
+      }
+    }
     const prod = this.addShopkeeperProduct(shopkeeperId, data);
     const success = await supabaseSaveProduct(prod);
     if (!success) {

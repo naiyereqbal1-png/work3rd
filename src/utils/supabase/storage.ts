@@ -45,9 +45,14 @@ export async function uploadProductImage(fileOrBase64: File | string, fileName?:
       });
 
     if (error) {
-      console.warn("[Supabase Storage] Bucket upload returned warning, falling back to local representation:", error.message);
-      // Fallback gracefully so the user is never blocked
-      return typeof fileOrBase64 === "string" ? fileOrBase64 : URL.createObjectURL(fileOrBase64);
+      console.warn("[Supabase Storage] Bucket upload returned warning, falling back to persistent data URL:", error.message);
+      if (typeof fileOrBase64 === "string") return fileOrBase64;
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(URL.createObjectURL(fileOrBase64));
+        reader.readAsDataURL(fileOrBase64);
+      });
     }
 
     // Get public URL

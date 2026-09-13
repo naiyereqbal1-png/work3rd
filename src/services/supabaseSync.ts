@@ -555,6 +555,7 @@ export async function supabaseSaveProduct(product: Product): Promise<boolean> {
     const { error: pErr } = await supabase.from("products").upsert(productRow);
     if (pErr) {
       handleSupabaseError("products", "upsert product", pErr);
+      return false;
     }
 
     // Images
