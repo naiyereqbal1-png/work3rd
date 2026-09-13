@@ -118,18 +118,29 @@ export const CustomerProfileView: React.FC<CustomerProfileViewProps> = ({
   const [editName, setEditName] = useState(customer.name);
   const [editEmail, setEditEmail] = useState(customer.email || '');
   const [profileMsg, setProfileMsg] = useState('');
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [isAddressSaving, setIsAddressSaving] = useState(false);
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updated = db.updateCustomerProfile({
-      name: editName,
-      email: editEmail,
-    });
-    if (updated) {
-      setLocalCustomer(updated);
+    setIsProfileSaving(true);
+    setProfileMsg('');
+    try {
+      const updated = await db.updateCustomerProfileAsync({
+        name: editName,
+        email: editEmail,
+      });
+      if (updated) {
+        setLocalCustomer(updated);
+      }
+      setProfileMsg('Profile updated successfully to database!');
+    } catch (err: any) {
+      console.error("[Customer Profile] Update error:", err);
+      setProfileMsg('Error: ' + (err.message || 'database error'));
+    } finally {
+      setIsProfileSaving(false);
+      setTimeout(() => setProfileMsg(''), 3500);
     }
-    setProfileMsg('Profile updated successfully!');
-    setTimeout(() => setProfileMsg(''), 2500);
   };
 
   // Saved Addresses State & Handlers
@@ -179,31 +190,46 @@ export const CustomerProfileView: React.FC<CustomerProfileViewProps> = ({
     setAddressSuccess('');
   };
 
-  const handleDeleteAddress = (id: string) => {
-    if (confirm('Are you sure you want to delete this address?')) {
-      db.deleteCustomerAddress(id);
+  const handleDeleteAddress = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this address?')) return;
+    setIsAddressSaving(true);
+    try {
+      await db.deleteCustomerAddressAsync(id);
       const current = db.getCurrentCustomer();
       if (current) setLocalCustomer(current);
+    } catch (err: any) {
+      console.error("[Customer Address] Delete error:", err);
+      alert('Failed to delete address: ' + err.message);
+    } finally {
+      setIsAddressSaving(false);
     }
   };
 
-  const handleSetDefaultAddress = (addr: any) => {
-    db.saveCustomerAddress({
-      name: addr.name,
-      mobile: addr.mobile,
-      pincode: addr.pincode,
-      address: addr.address,
-      city: addr.city,
-      state: addr.state,
-      landmark: addr.landmark || '',
-      address_type: addr.address_type,
-      is_default: true,
-    }, addr.id);
-    const current = db.getCurrentCustomer();
-    if (current) setLocalCustomer(current);
+  const handleSetDefaultAddress = async (addr: any) => {
+    setIsAddressSaving(true);
+    try {
+      await db.saveCustomerAddressAsync({
+        name: addr.name,
+        mobile: addr.mobile,
+        pincode: addr.pincode,
+        address: addr.address,
+        city: addr.city,
+        state: addr.state,
+        landmark: addr.landmark || '',
+        address_type: addr.address_type,
+        is_default: true,
+      }, addr.id);
+      const current = db.getCurrentCustomer();
+      if (current) setLocalCustomer(current);
+    } catch (err: any) {
+      console.error("[Customer Address] Set default error:", err);
+      alert('Failed to update default address: ' + err.message);
+    } finally {
+      setIsAddressSaving(false);
+    }
   };
 
-  const handleSaveAddress = (e: React.FormEvent) => {
+  const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddressError('');
     setAddressSuccess('');
@@ -233,27 +259,34 @@ export const CustomerProfileView: React.FC<CustomerProfileViewProps> = ({
       return;
     }
 
-    const saved = db.saveCustomerAddress({
-      name: formName.trim(),
-      mobile: formMobile.trim(),
-      pincode: formPincode.trim(),
-      address: formAddress.trim(),
-      city: formCity.trim(),
-      state: formState.trim(),
-      landmark: formLandmark.trim(),
-      address_type: formType,
-      is_default: formIsDefault,
-    }, editingAddressId || undefined);
+    setIsAddressSaving(true);
 
-    if (saved) {
-      setAddressSuccess(editingAddressId ? 'Address updated successfully!' : 'Address added successfully!');
-      setAddressFormOpen(false);
-      setEditingAddressId(null);
-      const current = db.getCurrentCustomer();
-      if (current) setLocalCustomer(current);
-      setTimeout(() => setAddressSuccess(''), 2500);
-    } else {
-      setAddressError('Failed to save address. Please try again.');
+    try {
+      const saved = await db.saveCustomerAddressAsync({
+        name: formName.trim(),
+        mobile: formMobile.trim(),
+        pincode: formPincode.trim(),
+        address: formAddress.trim(),
+        city: formCity.trim(),
+        state: formState.trim(),
+        landmark: formLandmark.trim(),
+        address_type: formType,
+        is_default: formIsDefault,
+      }, editingAddressId || undefined);
+
+      if (saved) {
+        setAddressSuccess(editingAddressId ? 'Address updated successfully in database!' : 'Address added successfully to database!');
+        setAddressFormOpen(false);
+        setEditingAddressId(null);
+        const current = db.getCurrentCustomer();
+        if (current) setLocalCustomer(current);
+        setTimeout(() => setAddressSuccess(''), 3500);
+      }
+    } catch (err: any) {
+      console.error("[Customer Address] Save error:", err);
+      setAddressError(err.message || 'Failed to save address. Please try again.');
+    } finally {
+      setIsAddressSaving(false);
     }
   };
 
@@ -1127,9 +1160,19 @@ export const CustomerProfileView: React.FC<CustomerProfileViewProps> = ({
                 <button
                   id="save-profile-btn"
                   type="submit"
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs"
+                  disabled={isProfileSaving}
+                  className={`px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-55 disabled:bg-slate-400 ${
+                    isProfileSaving ? 'cursor-not-allowed' : 'cursor-pointer'
+                  }`}
                 >
-                  Save Profile Changes
+                  {isProfileSaving ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Saving to DB...</span>
+                    </>
+                  ) : (
+                    'Save Profile Changes'
+                  )}
                 </button>
               </form>
             </div>
@@ -1328,16 +1371,27 @@ export const CustomerProfileView: React.FC<CustomerProfileViewProps> = ({
                   <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
                     <button
                       type="button"
+                      disabled={isAddressSaving}
                       onClick={() => setAddressFormOpen(false)}
-                      className="px-4 py-2 border border-slate-300 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                      className="px-4 py-2 border border-slate-300 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                      disabled={isAddressSaving}
+                      className={`px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        isAddressSaving ? 'opacity-70 cursor-not-allowed bg-slate-400' : ''
+                      }`}
                     >
-                      {editingAddressId ? 'Update Address' : 'Save Address'}
+                      {isAddressSaving ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                          <span>Saving to DB...</span>
+                        </>
+                      ) : (
+                        editingAddressId ? 'Update Address' : 'Save Address'
+                      )}
                     </button>
                   </div>
                 </form>

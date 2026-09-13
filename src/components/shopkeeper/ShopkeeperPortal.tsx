@@ -335,6 +335,7 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
   const [editProductSizes, setEditProductSizes] = useState<string[]>([]);
   const [editProductColors, setEditProductColors] = useState<string[]>([]);
   const [editFormMsg, setEditFormMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   const refreshShopkeeperData = () => {
     const updated = db.getShopkeeperById(shopkeeper.id);
@@ -566,22 +567,26 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
   };
 
   // Submit Edit Product
-  const handleEditProductSubmit = (e: React.FormEvent) => {
+  const handleEditProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEditFormMsg(null);
+    setIsSavingProduct(true);
 
     if (!permissions.can_edit_product) {
       setEditFormMsg({ type: 'error', text: 'You do not have permission to edit products.' });
+      setIsSavingProduct(false);
       return;
     }
 
     if (editProductImages.length === 0) {
       setEditFormMsg({ type: 'error', text: 'Please include at least one product image.' });
+      setIsSavingProduct(false);
       return;
     }
 
     if (Number(editProductSellingPrice) > Number(editProductMrp)) {
       setEditFormMsg({ type: 'error', text: 'Shopkeeper price cannot be higher than MRP.' });
+      setIsSavingProduct(false);
       return;
     }
 
@@ -607,48 +612,55 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
         colors: editProductColors,
       };
 
-      const updated = db.updateShopkeeperProduct(editProductId, shopkeeper.id, updates);
+      const updated = await db.updateShopkeeperProductAsync(editProductId, shopkeeper.id, updates);
       setEditFormMsg({
         type: 'success',
-        text: `Product "${updated.name}" updated successfully!`,
+        text: `Product updated successfully. Changes saved to database.`,
       });
 
       setTimeout(() => {
         setIsEditProductOpen(false);
         setEditFormMsg(null);
         refreshShopkeeperData();
-      }, 1200);
+      }, 1500);
     } catch (err: any) {
-      setEditFormMsg({ type: 'error', text: err.message || 'Failed to update product.' });
+      console.error("[Shopkeeper Portal] Error updating product:", err);
+      setEditFormMsg({ type: 'error', text: 'Failed to update product. Please try again.' });
+    } finally {
+      setIsSavingProduct(false);
     }
   };
 
   // Handle Add Product
-  const handleAddProductSubmit = (e: React.FormEvent) => {
+  const handleAddProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormMsg(null);
+    setIsSavingProduct(true);
 
     if (!permissions.can_add_product) {
       setFormMsg({
         type: 'error',
         text: 'You do not have permission to add new products. Please contact the administrator.',
       });
+      setIsSavingProduct(false);
       return;
     }
 
     if (newProductImages.length === 0) {
       setFormMsg({ type: 'error', text: 'Please attach at least one photo of the garment.' });
+      setIsSavingProduct(false);
       return;
     }
 
     if (Number(newProductSellingPrice) > Number(newProductMrp)) {
       setFormMsg({ type: 'error', text: 'Shopkeeper price cannot exceed MRP.' });
+      setIsSavingProduct(false);
       return;
     }
 
     try {
       const catObj = categories.find((c) => c.id === newProductCategory) || categories[0];
-      const created = db.shopkeeperAddProduct(shopkeeper.id, {
+      const created = await db.addShopkeeperProductAsync(shopkeeper.id, {
         name: newProductName,
         category_id: catObj.id,
         category_name: catObj.name,
@@ -669,7 +681,7 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
 
       setFormMsg({
         type: 'success',
-        text: `Product "${created.name}" submitted! It is now pending admin approval before going live.`,
+        text: `Product added successfully. Data saved to database.`,
       });
 
       setTimeout(() => {
@@ -686,9 +698,13 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
             sort_order: 1,
           },
         ]);
+        refreshShopkeeperData();
       }, 1500);
     } catch (err: any) {
-      setFormMsg({ type: 'error', text: err.message || 'Failed to submit product.' });
+      console.error("[Shopkeeper Portal] Error adding product:", err);
+      setFormMsg({ type: 'error', text: 'Failed to add product. Data was not saved.' });
+    } finally {
+      setIsSavingProduct(false);
     }
   };
 
@@ -2023,16 +2039,27 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={isSavingProduct}
                   onClick={() => setIsAddProductOpen(false)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+                  disabled={isSavingProduct}
+                  className={`px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 ${
+                    isSavingProduct ? 'opacity-70 cursor-not-allowed bg-slate-400 hover:bg-slate-400' : ''
+                  }`}
                 >
-                  Submit Garment for Review
+                  {isSavingProduct ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    'Submit Garment for Review'
+                  )}
                 </button>
               </div>
             </form>
@@ -2364,16 +2391,27 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={isSavingProduct}
                   onClick={() => setIsEditProductOpen(false)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+                  disabled={isSavingProduct}
+                  className={`px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 ${
+                    isSavingProduct ? 'opacity-70 cursor-not-allowed bg-slate-400 hover:bg-slate-400' : ''
+                  }`}
                 >
-                  Save Changes
+                  {isSavingProduct ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
                 </button>
               </div>
             </form>

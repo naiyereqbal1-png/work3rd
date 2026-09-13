@@ -16,7 +16,7 @@ interface AdminProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   productToEdit: Product | null;
-  onSaveSuccess: () => void;
+  onSaveSuccess: (message: string) => void;
   categories: Category[];
 }
 
@@ -48,6 +48,7 @@ export const AdminProductFormModal: React.FC<AdminProductFormModalProps> = ({
   const [washCare, setWashCare] = useState('Machine Wash');
   const [origin, setOrigin] = useState('India');
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Auto calculate discount percentage
   const discountPercentage =
@@ -175,22 +176,26 @@ export const AdminProductFormModal: React.FC<AdminProductFormModalProps> = ({
     setImages(updated);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsSaving(true);
 
     if (!name.trim()) {
       setError('Please provide a product title.');
+      setIsSaving(false);
       return;
     }
 
     if (sellingPrice > mrp) {
       setError('Selling price cannot exceed MRP.');
+      setIsSaving(false);
       return;
     }
 
     if (sizes.length === 0) {
       setError('Please select at least one available size.');
+      setIsSaving(false);
       return;
     }
 
@@ -223,14 +228,21 @@ export const AdminProductFormModal: React.FC<AdminProductFormModalProps> = ({
       },
     };
 
-    if (productToEdit) {
-      db.updateProduct(productToEdit.id, payload);
-    } else {
-      db.addProduct(payload);
+    try {
+      if (productToEdit) {
+        await db.updateProductAsync(productToEdit.id, payload);
+        onSaveSuccess('Product updated successfully. Changes saved to database.');
+      } else {
+        await db.addProductAsync(payload);
+        onSaveSuccess('Product added successfully. Data saved to database.');
+      }
+      onClose();
+    } catch (err: any) {
+      console.error("[Product Form Modal] Error saving product to Supabase:", err);
+      setError(productToEdit ? 'Failed to update product. Please try again.' : 'Failed to add product. Data was not saved.');
+    } finally {
+      setIsSaving(false);
     }
-
-    onSaveSuccess();
-    onClose();
   };
 
   const commonSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '28', '30', '32', '34', '36', '38'];
@@ -654,9 +666,19 @@ export const AdminProductFormModal: React.FC<AdminProductFormModalProps> = ({
             <button
               id="product-form-save-btn"
               type="submit"
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-xs"
+              disabled={isSaving}
+              className={`px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-xs flex items-center justify-center gap-1 ${
+                isSaving ? 'opacity-70 cursor-not-allowed bg-slate-400 hover:bg-slate-400' : ''
+              }`}
             >
-              {productToEdit ? 'Save Changes' : 'Create & Publish Garment'}
+              {isSaving ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                productToEdit ? 'Save Changes' : 'Create & Publish Garment'
+              )}
             </button>
           </div>
         </form>

@@ -7,6 +7,9 @@ export const AdminCategories: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>(db.getCategories());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   // Form State
   const [name, setName] = useState('');
@@ -28,6 +31,7 @@ export const AdminCategories: React.FC = () => {
     setImageUrl('https://images.unsplash.com/photo-1542272604-787c3835535d?w=800&q=80');
     setDisplayOrder(categories.length + 1);
     setStatus('ACTIVE');
+    setError('');
     setIsModalOpen(true);
   };
 
@@ -39,12 +43,15 @@ export const AdminCategories: React.FC = () => {
     setImageUrl(cat.image_url || cat.image || '');
     setDisplayOrder(cat.display_order || cat.sort_order || 1);
     setStatus(cat.status);
+    setError('');
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    setIsSaving(true);
+    setError('');
 
     const payload = {
       name: name.trim(),
@@ -57,20 +64,33 @@ export const AdminCategories: React.FC = () => {
       status,
     };
 
-    if (editingCategory) {
-      db.updateCategory(editingCategory.id, payload);
-    } else {
-      db.addCategory(payload);
+    try {
+      if (editingCategory) {
+        await db.updateCategoryAsync(editingCategory.id, payload);
+      } else {
+        await db.addCategoryAsync(payload);
+      }
+      refreshCategories();
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error("[Admin Categories] Save error:", err);
+      setError(err.message || 'Failed to save category. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-
-    refreshCategories();
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this category?')) {
-      db.deleteCategory(id);
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return;
+    setDeletingId(id);
+    try {
+      await db.deleteCategoryAsync(id);
       refreshCategories();
+    } catch (err: any) {
+      console.error("[Admin Categories] Delete error:", err);
+      alert('Failed to delete category: ' + (err.message || 'database error'));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -142,11 +162,18 @@ export const AdminCategories: React.FC = () => {
 
                 <button
                   id={`delete-cat-btn-${cat.id}`}
+                  disabled={deletingId !== null}
                   onClick={() => handleDelete(cat.id)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  className={`p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center justify-center ${
+                    deletingId === cat.id ? 'text-rose-600 animate-pulse cursor-not-allowed' : ''
+                  }`}
                   title="Delete Category"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {deletingId === cat.id ? (
+                    <span className="w-4 h-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -247,19 +274,36 @@ export const AdminCategories: React.FC = () => {
                 />
               </div>
 
+              {error && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-900 font-bold">
+                  {error}
+                </div>
+              )}
+
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 font-bold rounded-xl"
+                  className="px-4 py-2 border border-slate-300 text-slate-700 font-bold rounded-xl disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs"
+                  disabled={isSaving}
+                  className={`px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1.5 ${
+                    isSaving ? 'opacity-70 cursor-not-allowed bg-slate-400 hover:bg-slate-400' : ''
+                  }`}
                 >
-                  Save Category
+                  {isSaving ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    'Save Category'
+                  )}
                 </button>
               </div>
             </form>

@@ -67,6 +67,8 @@ export const AdminDeliveryBoys: React.FC = () => {
     status: 'Active' as DeliveryBoy['status'],
   });
   const [formError, setFormError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const refreshData = () => {
     setDeliveryBoys(db.getDeliveryBoys());
@@ -133,7 +135,7 @@ export const AdminDeliveryBoys: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -150,54 +152,75 @@ export const AdminDeliveryBoys: React.FC = () => {
       return;
     }
 
-    if (editingBoy) {
-      db.updateDeliveryBoy(editingBoy.id, {
-        name: formData.name.trim(),
-        mobile: formData.mobile.trim(),
-        email: formData.email.trim(),
-        password: formData.password.trim(),
-        vehicle_number: formData.vehicle_number.trim(),
-        vehicle_type: formData.vehicle_type,
-        city: formData.city.trim(),
-        status: formData.status,
-      });
-    } else {
-      const existing = deliveryBoys.find(
-        (b) => b.mobile === formData.mobile.trim()
-      );
-      if (existing) {
-        setFormError('A delivery partner with this mobile number already exists');
-        return;
+    setIsSaving(true);
+
+    try {
+      if (editingBoy) {
+        await db.updateDeliveryBoyAsync(editingBoy.id, {
+          name: formData.name.trim(),
+          mobile: formData.mobile.trim(),
+          email: formData.email.trim(),
+          password: formData.password.trim(),
+          vehicle_number: formData.vehicle_number.trim(),
+          vehicle_type: formData.vehicle_type,
+          city: formData.city.trim(),
+          status: formData.status,
+        });
+      } else {
+        const existing = deliveryBoys.find(
+          (b) => b.mobile === formData.mobile.trim()
+        );
+        if (existing) {
+          setFormError('A delivery partner with this mobile number already exists');
+          setIsSaving(false);
+          return;
+        }
+
+        await db.addDeliveryBoyAsync({
+          name: formData.name.trim(),
+          mobile: formData.mobile.trim(),
+          email: formData.email.trim(),
+          password: formData.password.trim() || 'delivery123',
+          vehicle_number: formData.vehicle_number.trim(),
+          vehicle_type: formData.vehicle_type,
+          city: formData.city.trim(),
+          status: formData.status,
+        });
       }
 
-      db.addDeliveryBoy({
-        name: formData.name.trim(),
-        mobile: formData.mobile.trim(),
-        email: formData.email.trim(),
-        password: formData.password.trim() || 'delivery123',
-        vehicle_number: formData.vehicle_number.trim(),
-        vehicle_type: formData.vehicle_type,
-        city: formData.city.trim(),
-        status: formData.status,
-      });
-    }
-
-    setIsModalOpen(false);
-    refreshData();
-  };
-
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to remove ${name} from delivery partners?`)) {
-      db.deleteDeliveryBoy(id);
+      setIsModalOpen(false);
       refreshData();
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to save delivery boy associate. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleToggleStatus = (boy: DeliveryBoy) => {
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to remove ${name} from delivery partners?`)) return;
+    setDeletingId(id);
+    try {
+      await db.deleteDeliveryBoyAsync(id);
+      refreshData();
+    } catch (err: any) {
+      console.error("[Admin Delivery Boys] Delete error:", err);
+      alert('Failed to remove delivery partner: ' + (err.message || 'database error'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleToggleStatus = async (boy: DeliveryBoy) => {
     const isAct = boy.status === 'Active' || boy.status === 'ACTIVE';
     const nextStatus = isAct ? 'Inactive' : 'Active';
-    db.updateDeliveryBoy(boy.id, { status: nextStatus });
-    refreshData();
+    try {
+      await db.updateDeliveryBoyAsync(boy.id, { status: nextStatus });
+      refreshData();
+    } catch (err: any) {
+      console.error("[Admin Delivery Boys] Toggle status error:", err);
+      alert('Failed to update status: ' + err.message);
+    }
   };
 
   // Detailed Management Data for all delivery boys
@@ -632,11 +655,18 @@ export const AdminDeliveryBoys: React.FC = () => {
                                 <Edit2 className="w-4 h-4" />
                               </button>
                               <button
+                                disabled={deletingId !== null}
                                 onClick={() => handleDelete(boy.id, boy.name)}
-                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                className={`p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${
+                                  deletingId === boy.id ? 'text-rose-600 animate-pulse cursor-not-allowed' : ''
+                                }`}
                                 title="Delete Delivery Partner"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                {deletingId === boy.id ? (
+                                  <span className="w-4 h-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
                               </button>
                             </div>
                           </td>
@@ -1334,17 +1364,28 @@ export const AdminDeliveryBoys: React.FC = () => {
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   id="submit-delivery-boy-btn"
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                  disabled={isSaving}
+                  className={`px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5 ${
+                    isSaving ? 'opacity-70 cursor-not-allowed bg-slate-400 hover:bg-slate-400' : ''
+                  }`}
                 >
-                  {editingBoy ? 'Save Changes' : 'Add Delivery Partner'}
+                  {isSaving ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    editingBoy ? 'Save Changes' : 'Add Delivery Partner'
+                  )}
                 </button>
               </div>
             </form>

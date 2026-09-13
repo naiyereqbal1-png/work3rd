@@ -46,6 +46,7 @@ export const AdminShopkeepers: React.FC = () => {
   const [newCity, setNewCity] = useState('New Delhi');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Rejection modal
   const [rejectModalProduct, setRejectModalProduct] = useState<Product | null>(null);
@@ -67,13 +68,14 @@ export const AdminShopkeepers: React.FC = () => {
 
   const pendingProducts = allProducts.filter((p) => p.approval_status === 'PENDING');
 
-  const handleCreateShopkeeper = (e: React.FormEvent) => {
+  const handleCreateShopkeeper = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
+    setIsSaving(true);
 
     try {
-      const created = db.createShopkeeper({
+      const created = await db.createShopkeeperAsync({
         name: newName,
         store_name: newStoreName,
         mobile: newMobile,
@@ -89,25 +91,32 @@ export const AdminShopkeepers: React.FC = () => {
       setTimeout(() => {
         setIsAddModalOpen(false);
         setFormSuccess('');
-      }, 1200);
+      }, 1500);
     } catch (err: any) {
-      setFormError(err.message || 'Failed to create shopkeeper.');
+      setFormError(err.message || 'Failed to create shopkeeper. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleTogglePermission = (key: keyof ShopkeeperPermissions) => {
+  const handleTogglePermission = async (key: keyof ShopkeeperPermissions) => {
     if (!editingShopkeeper) return;
     const updatedPerms: ShopkeeperPermissions = {
       ...editingShopkeeper.permissions,
       [key]: !editingShopkeeper.permissions[key],
     };
 
-    const res = db.updateShopkeeper(editingShopkeeper.id, {
-      permissions: updatedPerms,
-    });
-    if (res) {
-      setEditingShopkeeper(res);
-      refreshData();
+    try {
+      const res = await db.updateShopkeeperAsync(editingShopkeeper.id, {
+        permissions: updatedPerms,
+      });
+      if (res) {
+        setEditingShopkeeper(res);
+        refreshData();
+      }
+    } catch (err: any) {
+      console.error("[Admin Shopkeepers] Toggle permission error:", err);
+      alert("Failed to update permissions: " + err.message);
     }
   };
 
@@ -674,16 +683,27 @@ export const AdminShopkeepers: React.FC = () => {
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-sm"
+                  disabled={isSaving}
+                  className={`px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-sm flex items-center gap-1.5 ${
+                    isSaving ? 'opacity-70 cursor-not-allowed bg-slate-400 hover:bg-slate-400' : ''
+                  }`}
                 >
-                  Create Shopkeeper
+                  {isSaving ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    'Create Shopkeeper'
+                  )}
                 </button>
               </div>
             </form>

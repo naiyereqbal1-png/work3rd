@@ -47,6 +47,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
 
   const [categories, setCategories] = useState<Category[]>(db.getCategories());
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 4000);
+  };
 
   const handleOpenAddProduct = () => {
     setProductToEdit(null);
@@ -58,8 +66,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     setIsProductModalOpen(true);
   };
 
-  const handleProductSaveSuccess = () => {
-    // triggers notifyDataChanged
+  const handleProductSaveSuccess = (message: string) => {
+    showToast(message, 'success');
   };
 
   const menuItems = [
@@ -278,6 +286,25 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         onSaveSuccess={handleProductSaveSuccess}
         categories={categories}
       />
+
+      {/* Reusable Toast Notifications */}
+      {toast && (
+        <div
+          id="admin-global-toast"
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl border text-xs font-extrabold transition-all duration-300 animate-slide-up ${
+            toast.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black">✓</div>
+          ) : (
+            <div className="w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center font-black">✗</div>
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 };

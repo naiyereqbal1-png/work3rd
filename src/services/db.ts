@@ -50,6 +50,10 @@ import {
   supabaseSaveReturn,
   supabaseSaveStockTransaction,
   supabaseSubscribeRealtime,
+  supabaseDeleteCategory,
+  supabaseDeleteCustomer,
+  supabaseDeleteShopkeeper,
+  supabaseDeleteDeliveryBoy,
   pullFromSupabase,
   pushToSupabase,
 } from './supabaseSync';
@@ -852,6 +856,23 @@ class DatabaseService {
     return newCat;
   }
 
+  async addCategoryAsync(categoryData: Omit<Category, 'id'>): Promise<Category> {
+    const categories = this.getCategories();
+    const id = `cat-${categoryData.slug || Math.random().toString(36).substring(2, 9)}`;
+    const newCat: Category = {
+      ...categoryData,
+      id,
+    };
+    const success = await supabaseSaveCategory(newCat);
+    if (!success) {
+      throw new Error("Failed to save category to database.");
+    }
+    categories.push(newCat);
+    this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    notifyDataChanged();
+    return newCat;
+  }
+
   updateCategory(id: string, updates: Partial<Category>): Category | null {
     const categories = this.getCategories();
     const idx = categories.findIndex((c) => c.id === id);
@@ -862,7 +883,38 @@ class DatabaseService {
     return categories[idx];
   }
 
+  async updateCategoryAsync(id: string, updates: Partial<Category>): Promise<Category | null> {
+    const categories = this.getCategories();
+    const idx = categories.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+
+    const original = categories[idx];
+    const updated = { ...original, ...updates };
+
+    const success = await supabaseSaveCategory(updated);
+    if (!success) {
+      throw new Error("Failed to save category changes to database.");
+    }
+
+    categories[idx] = updated;
+    this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    notifyDataChanged();
+    return updated;
+  }
+
   deleteCategory(id: string): boolean {
+    let categories = this.getCategories();
+    categories = categories.filter((c) => c.id !== id);
+    this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    notifyDataChanged();
+    return true;
+  }
+
+  async deleteCategoryAsync(id: string): Promise<boolean> {
+    const success = await supabaseDeleteCategory(id);
+    if (!success) {
+      throw new Error("Failed to delete category from database.");
+    }
     let categories = this.getCategories();
     categories = categories.filter((c) => c.id !== id);
     this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
@@ -1138,6 +1190,130 @@ class DatabaseService {
     return true;
   }
 
+  async addProductAsync(productData: Partial<Product>): Promise<Product> {
+    const all = this.getAllProducts();
+    const id = productData.id || `prod-${Date.now()}`;
+    const mrp = Number(productData.mrp) || 1999;
+    const adminPrice = productData.admin_selling_price !== undefined
+      ? Number(productData.admin_selling_price)
+      : (productData.selling_price !== undefined ? Number(productData.selling_price) : 999);
+    const price = adminPrice;
+    const shopkeeperPrice = productData.shopkeeper_price !== undefined
+      ? Number(productData.shopkeeper_price)
+      : 600;
+    const discount = productData.discount_percentage !== undefined
+      ? Number(productData.discount_percentage)
+      : Math.max(0, Math.round(((mrp - price) / mrp) * 100));
+
+    let status = productData.status || 'Published';
+    if (productData.stock !== undefined && productData.stock <= 0 && status === 'Published') {
+      status = 'Out of Stock';
+    }
+
+    const newProd: Product = {
+      id,
+      sku: productData.sku || `ST1-${Math.floor(1000 + Math.random() * 9000)}`,
+      name: productData.name || '',
+      slug: productData.slug || (productData.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      category_id: productData.category_id || 'cat-jeans',
+      category_name: productData.category_name || 'Jeans',
+      category_slug: productData.category_slug || 'jeans',
+      gender: productData.gender || 'Men',
+      description: productData.description || '',
+      brand: productData.brand || 'TRYatHOME Originals',
+      mrp,
+      selling_price: price,
+      admin_selling_price: adminPrice,
+      shopkeeper_price: shopkeeperPrice,
+      discount_percentage: discount,
+      stock: productData.stock !== undefined ? Number(productData.stock) : 40,
+      status,
+      rating: productData.rating || 5.0,
+      rating_count: productData.rating_count || 0,
+      sizes: productData.sizes || [],
+      colors: productData.colors || [],
+      tags: productData.tags || [],
+      specifications: productData.specifications || {},
+      shopkeeper_id: productData.shopkeeper_id || null,
+      shopkeeper_name: productData.shopkeeper_name || null,
+      approval_status: productData.approval_status || 'APPROVED',
+      rejection_reason: productData.rejection_reason || null,
+      is_live: productData.is_live !== false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      images: productData.images || [],
+      variants: productData.variants || [],
+    };
+
+    const success = await supabaseSaveProduct(newProd);
+    if (!success) {
+      throw new Error("Failed to save product to the database.");
+    }
+
+    all.push(newProd);
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    notifyDataChanged();
+    return newProd;
+  }
+
+  async updateProductAsync(id: string, updates: Partial<Product>): Promise<Product | null> {
+    const all = this.getAllProducts();
+    const idx = all.findIndex((p) => p.id === id);
+    if (idx === -1) return null;
+
+    let mrp = updates.mrp !== undefined ? Number(updates.mrp) : all[idx].mrp;
+    let adminPrice = updates.admin_selling_price !== undefined
+      ? Number(updates.admin_selling_price)
+      : (updates.selling_price !== undefined ? Number(updates.selling_price) : (all[idx].admin_selling_price || all[idx].selling_price));
+    let price = adminPrice;
+    let discount = updates.discount_percentage !== undefined
+      ? Number(updates.discount_percentage)
+      : Math.max(0, Math.round(((mrp - price) / mrp) * 100));
+
+    let shopkeeperPrice = updates.shopkeeper_price !== undefined
+      ? Number(updates.shopkeeper_price)
+      : all[idx].shopkeeper_price;
+
+    let status = updates.status || all[idx].status;
+    if (updates.stock !== undefined && updates.stock <= 0 && status === 'Published') {
+      status = 'Out of Stock';
+    }
+
+    const updatedProd: Product = {
+      ...all[idx],
+      ...updates,
+      mrp,
+      selling_price: price,
+      admin_selling_price: adminPrice,
+      shopkeeper_price: shopkeeperPrice,
+      discount_percentage: discount,
+      status,
+      updated_at: new Date().toISOString(),
+    };
+
+    const success = await supabaseUpdateProduct(id, updatedProd);
+    if (!success) {
+      throw new Error("Failed to save changes to the database.");
+    }
+
+    all[idx] = updatedProd;
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    notifyDataChanged();
+    return updatedProd;
+  }
+
+  async deleteProductAsync(id: string): Promise<boolean> {
+    const success = await supabaseDeleteProduct(id);
+    if (!success) {
+      throw new Error("Failed to delete product from database.");
+    }
+    let all = this.getAllProducts();
+    all = all.filter((p) => p.id !== id);
+    this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+    notifyDataChanged();
+    return true;
+  }
+
   // ===================== CUSTOMER AUTH & PROFILE =====================
   getCustomers(): Customer[] {
     try {
@@ -1321,6 +1497,116 @@ class DatabaseService {
     list[idx].status = 'INACTIVE';
     this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
     notifyDataChanged();
+    return true;
+  }
+
+  async createShopkeeperAsync(data: {
+    name: string;
+    store_name?: string;
+    mobile: string;
+    email?: string;
+    city?: string;
+    permissions?: Partial<ShopkeeperPermissions>;
+  }): Promise<Shopkeeper> {
+    const shopkeepers = this.getShopkeepers();
+    const cleanMobile = data.mobile.replace(/\D/g, '').slice(-10);
+    if (cleanMobile.length !== 10) {
+      throw new Error('Please enter a valid 10-digit mobile number.');
+    }
+    const roleCheck = this.checkMobileRole(cleanMobile);
+    if (roleCheck.exists) {
+      throw new Error(`Mobile number +91 ${cleanMobile} is already registered as ${roleCheck.role}.`);
+    }
+
+    const nextIndex = shopkeepers.length + 1;
+    const shopkeeper_id = `STYLE1-SHOP-${String(nextIndex).padStart(6, '0')}`;
+    const id = `shop-${Date.now()}`;
+
+    const defaultPermissions: ShopkeeperPermissions = {
+      can_view_dashboard: true,
+      can_add_product: true,
+      can_edit_product: true,
+      can_upload_images: true,
+      can_view_catalog: true,
+      can_stock_in: true,
+      can_stock_out: true,
+      can_view_inventory: true,
+      can_view_orders: true,
+      can_view_stock_history: true,
+      can_edit_price: true,
+      can_edit_category: false,
+      can_edit_images: true,
+    };
+
+    const newShopkeeper: Shopkeeper = {
+      id,
+      shopkeeper_id,
+      name: data.name.trim(),
+      store_name: data.store_name?.trim() || `${data.name.trim()}'s Fashion Hub`,
+      mobile: cleanMobile,
+      email: data.email?.trim() || `${cleanMobile}@partner.tryathome.in`,
+      city: data.city?.trim() || 'New Delhi',
+      status: 'ACTIVE',
+      created_at: new Date().toISOString(),
+      permissions: {
+        ...defaultPermissions,
+        ...(data.permissions || {}),
+      },
+      total_products: 0,
+      live_products: 0,
+      pending_products: 0,
+      current_stock: 0,
+      total_orders: 0,
+    };
+
+    const success = await supabaseSaveShopkeeper(newShopkeeper);
+    if (!success) {
+      throw new Error("Failed to save shopkeeper partner to database.");
+    }
+
+    shopkeepers.push(newShopkeeper);
+    this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(shopkeepers));
+    notifyDataChanged();
+    return newShopkeeper;
+  }
+
+  async updateShopkeeperAsync(id: string, updates: Partial<Shopkeeper>): Promise<Shopkeeper | null> {
+    const list = this.getShopkeepers();
+    const idx = list.findIndex((s) => s.id === id || s.shopkeeper_id === id);
+    if (idx === -1) return null;
+
+    const original = list[idx];
+    const updated = {
+      ...original,
+      ...updates,
+      permissions: updates.permissions
+        ? { ...original.permissions, ...updates.permissions }
+        : original.permissions,
+    };
+
+    const success = await supabaseSaveShopkeeper(updated);
+    if (!success) {
+      throw new Error("Failed to save shopkeeper updates to database.");
+    }
+
+    list[idx] = updated;
+    this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
+    notifyDataChanged();
+    return updated;
+  }
+
+  async deleteShopkeeperAsync(id: string): Promise<boolean> {
+    const success = await supabaseDeleteShopkeeper(id);
+    if (!success) {
+      throw new Error("Failed to delete shopkeeper from database.");
+    }
+    const list = this.getShopkeepers();
+    const idx = list.findIndex((s) => s.id === id || s.shopkeeper_id === id);
+    if (idx !== -1) {
+      list[idx].status = 'INACTIVE';
+      this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(list));
+      notifyDataChanged();
+    }
     return true;
   }
 
@@ -1587,6 +1873,47 @@ class DatabaseService {
     const updated = this.updateProduct(productId, cleanUpdates);
     this.recalculateShopkeeperStats(shopkeeperId);
     return updated!;
+  }
+
+  async addShopkeeperProductAsync(
+    shopkeeperId: string,
+    data: any
+  ): Promise<Product> {
+    const prod = this.addShopkeeperProduct(shopkeeperId, data);
+    const success = await supabaseSaveProduct(prod);
+    if (!success) {
+      let all = this.getAllProducts();
+      all = all.filter((p) => p.id !== prod.id);
+      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+      this.recalculateShopkeeperStats(shopkeeperId);
+      notifyDataChanged();
+      throw new Error("Failed to save product to database.");
+    }
+    return prod;
+  }
+
+  async updateShopkeeperProductAsync(
+    productId: string,
+    shopkeeperId: string,
+    updates: Partial<Product>
+  ): Promise<Product> {
+    const original = this.getProductById(productId);
+    if (!original) throw new Error('Product not found.');
+
+    const prod = this.updateShopkeeperProduct(productId, shopkeeperId, updates);
+    const success = await supabaseUpdateProduct(productId, prod);
+    if (!success) {
+      const all = this.getAllProducts();
+      const idx = all.findIndex((p) => p.id === productId);
+      if (idx !== -1) {
+        all[idx] = original;
+        this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(all));
+        this.recalculateShopkeeperStats(shopkeeperId);
+        notifyDataChanged();
+      }
+      throw new Error("Failed to save changes to database.");
+    }
+    return prod;
   }
 
   adminSetProductSellingPrice(productId: string, adminSellingPrice: number): Product {
@@ -2393,6 +2720,102 @@ class DatabaseService {
     }
 
     supabaseDeleteAddress(addressId).catch(() => {});
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
+    notifyDataChanged();
+    return true;
+  }
+
+  async updateCustomerProfileAsync(updates: Partial<Customer>): Promise<Customer | null> {
+    const current = this.getCurrentCustomer();
+    if (!current) return null;
+
+    const customers = this.getCustomers();
+    const idx = customers.findIndex((c) => c.id === current.id);
+    if (idx === -1) return null;
+
+    const original = customers[idx];
+    const updated = { ...original, ...updates };
+
+    const success = await supabaseSaveCustomer(updated);
+    if (!success) {
+      throw new Error("Failed to save profile updates to database.");
+    }
+
+    customers[idx] = updated;
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(updated));
+    notifyDataChanged();
+    return updated;
+  }
+
+  async saveCustomerAddressAsync(addressData: Omit<CustomerAddress, 'id' | 'customer_id'>, addressId?: string): Promise<CustomerAddress | null> {
+    const current = this.getCurrentCustomer();
+    if (!current) return null;
+
+    const customers = this.getCustomers();
+    const cIdx = customers.findIndex((c) => c.id === current.id);
+    if (cIdx === -1) return null;
+
+    let addresses = customers[cIdx].addresses || [];
+
+    if (addressData.is_default) {
+      addresses = addresses.map((a) => ({ ...a, is_default: false }));
+    }
+
+    let savedAddr: CustomerAddress;
+
+    if (addressId) {
+      const aIdx = addresses.findIndex((a) => a.id === addressId);
+      if (aIdx !== -1) {
+        savedAddr = {
+          ...addresses[aIdx],
+          ...addressData,
+        };
+        addresses[aIdx] = savedAddr;
+      } else {
+        return null;
+      }
+    } else {
+      savedAddr = {
+        ...addressData,
+        id: `addr-${Date.now()}`,
+        customer_id: current.customer_id,
+        is_default: addresses.length === 0 ? true : !!addressData.is_default,
+      };
+      addresses.push(savedAddr);
+    }
+
+    const success = await supabaseSaveAddress(savedAddr);
+    if (!success) {
+      throw new Error("Failed to save address to database.");
+    }
+
+    customers[cIdx].addresses = addresses;
+    this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
+    notifyDataChanged();
+    return savedAddr;
+  }
+
+  async deleteCustomerAddressAsync(addressId: string): Promise<boolean> {
+    const current = this.getCurrentCustomer();
+    if (!current) return false;
+
+    const customers = this.getCustomers();
+    const cIdx = customers.findIndex((c) => c.id === current.id);
+    if (cIdx === -1) return false;
+
+    const success = await supabaseDeleteAddress(addressId);
+    if (!success) {
+      throw new Error("Failed to delete address from database.");
+    }
+
+    customers[cIdx].addresses = (customers[cIdx].addresses || []).filter((a) => a.id !== addressId);
+    if (customers[cIdx].addresses.length > 0 && !customers[cIdx].addresses.some((a) => a.is_default)) {
+      customers[cIdx].addresses[0].is_default = true;
+    }
+
     this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
     this.setStorageItem(STORAGE_KEYS.CURRENT_CUSTOMER, JSON.stringify(customers[cIdx]));
     notifyDataChanged();
@@ -3608,6 +4031,76 @@ class DatabaseService {
     all = all.filter((d) => d.id !== id && d.delivery_boy_id !== id);
     if (all.length === initialLen) return false;
 
+    this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
+    notifyDataChanged();
+    return true;
+  }
+
+  async addDeliveryBoyAsync(data: Partial<DeliveryBoy>): Promise<DeliveryBoy> {
+    const all = this.getDeliveryBoys();
+    const nextNum = all.length + 1;
+    const dboyIdStr = `STYLE1-DBOY-${String(nextNum).padStart(6, '0')}`;
+
+    const newBoy: DeliveryBoy = {
+      id: `dboy-${Date.now()}`,
+      delivery_boy_id: dboyIdStr,
+      name: data.name || 'Delivery Associate',
+      mobile: (data.mobile || '').replace(/\D/g, ''),
+      email: data.email || `dboy${nextNum}@style1.in`,
+      vehicle_type: data.vehicle_type || 'Motorcycle',
+      vehicle_number: (data.vehicle_number || 'KA-01-XX-0000').toUpperCase(),
+      status: data.status || 'ACTIVE',
+      assigned_area: data.assigned_area || 'Central Bengaluru',
+      created_at: new Date().toISOString(),
+      total_delivered: 0,
+      rating: 5.0,
+    };
+
+    const success = await supabaseSaveDeliveryBoy(newBoy);
+    if (!success) {
+      throw new Error("Failed to save delivery boy associate to database.");
+    }
+
+    all.push(newBoy);
+    this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
+    notifyDataChanged();
+    return newBoy;
+  }
+
+  async updateDeliveryBoyAsync(id: string, updates: Partial<DeliveryBoy>): Promise<DeliveryBoy | null> {
+    const all = this.getDeliveryBoys();
+    const idx = all.findIndex((d) => d.id === id || d.delivery_boy_id === id);
+    if (idx === -1) return null;
+
+    const original = all[idx];
+    const updated = { ...original, ...updates };
+
+    const success = await supabaseSaveDeliveryBoy(updated);
+    if (!success) {
+      throw new Error("Failed to save delivery boy updates to database.");
+    }
+
+    all[idx] = updated;
+    this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
+
+    // Update current delivery boy session if same
+    const current = this.getCurrentDeliveryBoy();
+    if (current && (current.id === id || current.delivery_boy_id === id)) {
+      this.setStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(updated));
+    }
+
+    notifyDataChanged();
+    return updated;
+  }
+
+  async deleteDeliveryBoyAsync(id: string): Promise<boolean> {
+    const success = await supabaseDeleteDeliveryBoy(id);
+    if (!success) {
+      throw new Error("Failed to delete delivery boy associate from database.");
+    }
+
+    let all = this.getDeliveryBoys();
+    all = all.filter((d) => d.id !== id && d.delivery_boy_id !== id);
     this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(all));
     notifyDataChanged();
     return true;

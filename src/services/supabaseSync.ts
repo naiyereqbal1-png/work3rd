@@ -862,6 +862,54 @@ export async function supabaseSaveStockTransaction(tx: StockTransaction): Promis
   }
 }
 
+export async function supabaseDeleteCategory(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("categories").delete().eq("id", id);
+    if (error) {
+      return handleSupabaseError("categories", "delete category", error);
+    }
+    return true;
+  } catch (err) {
+    return handleSupabaseError("categories", "delete category", err);
+  }
+}
+
+export async function supabaseDeleteCustomer(customerId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("customers").delete().eq("customer_id", customerId);
+    if (error) {
+      return handleSupabaseError("customers", "delete customer", error);
+    }
+    return true;
+  } catch (err) {
+    return handleSupabaseError("customers", "delete customer", err);
+  }
+}
+
+export async function supabaseDeleteShopkeeper(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("shopkeepers").delete().eq("id", id);
+    if (error) {
+      return handleSupabaseError("shopkeepers", "delete shopkeeper", error);
+    }
+    return true;
+  } catch (err) {
+    return handleSupabaseError("shopkeepers", "delete shopkeeper", err);
+  }
+}
+
+export async function supabaseDeleteDeliveryBoy(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("delivery_boys").delete().eq("id", id);
+    if (error) {
+      return handleSupabaseError("delivery_boys", "delete delivery boy", error);
+    }
+    return true;
+  } catch (err) {
+    return handleSupabaseError("delivery_boys", "delete delivery boy", err);
+  }
+}
+
 /**
  * Setup Realtime channel on public schema for cross-PC live synchronization.
  */
