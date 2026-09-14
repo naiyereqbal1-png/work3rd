@@ -10,6 +10,7 @@ import {
   LogOut,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   Menu,
   X,
   Store,
@@ -24,6 +25,8 @@ import { AdminProductFormModal } from './AdminProductFormModal';
 import { AdminCategories } from './AdminCategories';
 import { AdminInventory } from './AdminInventory';
 import { AdminOrders } from './AdminOrders';
+import { AdminOrderManagement } from './AdminOrderManagement';
+import { AdminOrderHistory } from './AdminOrderHistory';
 import { AdminDeliveryBoys } from './AdminDeliveryBoys';
 import { AdminCustomers } from './AdminCustomers';
 import { AdminSettings } from './AdminSettings';
@@ -44,6 +47,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onSwitchToCustomerView,
 }) => {
   const [activeTab, setActiveTab] = useState<string>('DASHBOARD');
+  const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
@@ -168,6 +172,74 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               const isActive = activeTab === item.id;
               const isOrdersTab = item.id === 'ORDERS';
               
+              if (isOrdersTab) {
+                const isSubItemActive = activeTab === 'ORDER_MANAGEMENT' || activeTab === 'ORDER_HISTORY' || activeTab === 'ORDERS';
+                return (
+                  <div key={item.id} className="space-y-1">
+                    <button
+                      id={`admin-nav-orders-toggle`}
+                      onClick={() => setIsOrdersExpanded(!isOrdersExpanded)}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all relative ${
+                        isSubItemActive
+                          ? 'bg-slate-100 text-slate-900 border-l-4 border-indigo-500'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border-l-4 border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className={`w-4 h-4 text-indigo-500 transition-transform ${isSubItemActive ? 'scale-110 text-indigo-600' : ''}`} />
+                        <span className="tracking-wide font-extrabold uppercase">ORDERS</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-wider bg-indigo-100 text-indigo-800">
+                          Core
+                        </span>
+                        {isOrdersExpanded ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                      </div>
+                    </button>
+
+                    {isOrdersExpanded && (
+                      <div className="pl-4 space-y-1 border-l border-slate-200 ml-5">
+                        <button
+                          id="admin-nav-order-management"
+                          onClick={() => {
+                            setActiveTab('ORDER_MANAGEMENT');
+                            setMobileSidebarOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold transition-all ${
+                            activeTab === 'ORDER_MANAGEMENT' || activeTab === 'ORDERS'
+                              ? 'bg-indigo-900 text-white shadow-xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`}
+                        >
+                          <div className={`w-1.5 h-1.5 rounded-full ${activeTab === 'ORDER_MANAGEMENT' || activeTab === 'ORDERS' ? 'bg-amber-400' : 'bg-slate-300'}`}></div>
+                          <span>Order Management</span>
+                        </button>
+                        
+                        <button
+                          id="admin-nav-order-history"
+                          onClick={() => {
+                            setActiveTab('ORDER_HISTORY');
+                            setMobileSidebarOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold transition-all ${
+                            activeTab === 'ORDER_HISTORY'
+                              ? 'bg-indigo-900 text-white shadow-xs'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`}
+                        >
+                          <div className={`w-1.5 h-1.5 rounded-full ${activeTab === 'ORDER_HISTORY' ? 'bg-amber-400' : 'bg-slate-300'}`}></div>
+                          <span>Order History</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={item.id}
@@ -178,37 +250,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   }}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all relative ${
                     isActive
-                      ? isOrdersTab
-                        ? 'bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white shadow-md border-l-4 border-indigo-500'
-                        : 'bg-slate-900 text-white shadow-2xs'
-                      : isOrdersTab
-                        ? 'text-slate-700 hover:bg-indigo-50/80 hover:text-indigo-900 border-l-4 border-transparent hover:border-indigo-300'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <Icon className={`w-4 h-4 transition-transform ${
-                      isActive 
-                        ? isOrdersTab 
-                          ? 'text-amber-400 scale-110' 
-                          : 'text-amber-400' 
-                        : isOrdersTab
-                          ? 'text-indigo-500'
-                          : 'text-slate-400'
+                      isActive ? 'text-amber-400' : 'text-slate-400'
                     }`} />
-                    <span className={isOrdersTab ? 'tracking-wide font-extrabold' : ''}>{item.label}</span>
+                    <span>{item.label}</span>
                   </div>
 
-                  {isOrdersTab ? (
-                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-wider flex items-center gap-1 ${
-                      isActive
-                        ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-400/20'
-                        : 'bg-indigo-100 text-indigo-800'
-                    }`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      Core
-                    </span>
-                  ) : item.badge ? (
+                  {item.badge ? (
                     <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded">
                       {item.badge}
                     </span>
@@ -240,10 +293,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className={`${activeTab === 'ORDERS' ? 'max-w-[100%] px-1' : 'max-w-7xl'} mx-auto`}>
+          <div className={`${activeTab === 'ORDERS' || activeTab === 'ORDER_MANAGEMENT' || activeTab === 'ORDER_HISTORY' ? 'max-w-[100%] px-1' : 'max-w-7xl'} mx-auto`}>
             {activeTab === 'DASHBOARD' && (
               <AdminDashboard
-                onNavigateTab={(tab) => setActiveTab(tab)}
+                onNavigateTab={(tab) => {
+                  if (tab === 'ORDERS') {
+                    setActiveTab('ORDER_MANAGEMENT');
+                  } else {
+                    setActiveTab(tab);
+                  }
+                }}
                 onOpenAddProduct={handleOpenAddProduct}
               />
             )}
@@ -262,7 +321,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
             {activeTab === 'INVENTORY' && <AdminInventory />}
 
-            {activeTab === 'ORDERS' && <AdminOrders />}
+            {activeTab === 'ORDERS' && <AdminOrderManagement />}
+
+            {activeTab === 'ORDER_MANAGEMENT' && <AdminOrderManagement />}
+
+            {activeTab === 'ORDER_HISTORY' && <AdminOrderHistory />}
 
             {activeTab === 'DELIVERY_BOYS' && <AdminDeliveryBoys />}
 
