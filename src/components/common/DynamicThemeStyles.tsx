@@ -14,18 +14,19 @@ export const DynamicThemeStyles: React.FC = () => {
     };
   }, []);
 
-  const primary = settings.theme_primary || '#0f172a';
-  const secondary = settings.theme_secondary || '#ffffff';
-  const accent = settings.theme_accent || '#f59e0b';
-  const bg = settings.theme_background || '#f8fafc';
+  const primary = settings.theme_primary || settings.primary_color || '#0f172a';
+  const secondary = settings.theme_secondary || settings.secondary_color || '#ffffff';
+  const accent = settings.theme_accent || settings.accent_color || '#f59e0b';
+  const bg = settings.theme_background || settings.bg_color || '#f8fafc';
   const cardBg = settings.theme_card_background || '#ffffff';
-  const text = settings.theme_text || '#334155';
-  const heading = settings.theme_heading || '#0f172a';
-  const button = settings.theme_button || '#f59e0b';
-  const buttonText = settings.theme_button_text || '#0f172a';
-  const border = settings.theme_border || '#e2e8f0';
-  const header = settings.theme_header || '#ffffff';
-  const footer = settings.theme_footer || '#0f172a';
+  const text = settings.theme_text || settings.text_color || '#334155';
+  const heading = settings.theme_heading || settings.heading_color || '#0f172a';
+  const button = settings.theme_button || settings.primary_color || '#f59e0b';
+  const buttonText = settings.theme_button_text || settings.button_text_color || '#ffffff';
+  const border = settings.theme_border || settings.border_color || '#e2e8f0';
+  const header = settings.theme_header || settings.header_bg_color || '#ffffff';
+  const footer = settings.theme_footer || settings.footer_bg_color || '#0f172a';
+  const headerText = settings.header_text_color || '#1e293b';
 
   return (
     <style id="website-dynamic-theme-style">{`
@@ -73,7 +74,20 @@ export const DynamicThemeStyles: React.FC = () => {
       
       .theme-border-color { border-color: var(--theme-border) !important; }
       
-      .theme-bg-header { background-color: var(--theme-header) !important; }
+      .theme-bg-header { 
+        background-color: var(--theme-header) !important; 
+        color: ${headerText} !important;
+      }
+      .theme-bg-header a, 
+      .theme-bg-header span, 
+      .theme-bg-header button, 
+      .theme-bg-header svg {
+        color: ${headerText} !important;
+      }
+      /* Ensure logo or text has high visibility */
+      .theme-bg-header span.font-black, .theme-bg-header span.text-xl {
+        color: ${headerText} !important;
+      }
       
       .theme-bg-footer { background-color: var(--theme-footer) !important; }
 
@@ -84,6 +98,31 @@ export const DynamicThemeStyles: React.FC = () => {
       }
       h1, h2, h3, h4, h5, h6 {
         color: var(--theme-heading);
+      }
+
+      /* Seamless Global Palette Overrides */
+      .bg-indigo-600, .bg-indigo-500, .bg-teal-600 {
+        background-color: var(--theme-primary) !important;
+      }
+      .hover\:bg-indigo-700:hover, .hover\:bg-teal-700:hover, .hover\:bg-indigo-800:hover {
+        background-color: var(--theme-primary) !important;
+        filter: brightness(0.9);
+      }
+      .text-indigo-600, .text-teal-600, .text-indigo-500 {
+        color: var(--theme-primary) !important;
+      }
+      .border-indigo-600, .border-teal-600 {
+        border-color: var(--theme-primary) !important;
+      }
+      .focus\:ring-indigo-500:focus, .focus\:ring-teal-500:focus {
+        --tw-ring-color: var(--theme-primary) !important;
+      }
+      /* Quick actions and customer active badges */
+      .bg-indigo-50, .bg-teal-50 {
+        background-color: var(--theme-secondary) !important;
+      }
+      .text-indigo-700, .text-teal-700 {
+        color: var(--theme-primary) !important;
       }
     `}</style>
   );

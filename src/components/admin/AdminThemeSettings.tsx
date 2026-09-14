@@ -21,7 +21,33 @@ import { db } from '../../services/db';
 import { StoreSettings, HeroSlideConfig, FestivalBannerConfig, AdvertisementBannerConfig } from '../../types';
 
 export const AdminThemeSettings: React.FC = () => {
-  const [settings, setSettings] = useState<StoreSettings>(() => db.getSettings());
+  const [settings, setSettings] = useState<StoreSettings>(() => {
+    const raw = db.getSettings();
+    return {
+      ...raw,
+      primary_color: raw.primary_color || raw.theme_primary || '#4f46e5',
+      theme_primary: raw.theme_primary || raw.primary_color || '#4f46e5',
+      secondary_color: raw.secondary_color || raw.theme_secondary || '#ffffff',
+      theme_secondary: raw.theme_secondary || raw.secondary_color || '#ffffff',
+      accent_color: raw.accent_color || raw.theme_accent || '#f59e0b',
+      theme_accent: raw.theme_accent || raw.accent_color || '#f59e0b',
+      bg_color: raw.bg_color || raw.theme_background || '#f8fafc',
+      theme_background: raw.theme_background || raw.bg_color || '#f8fafc',
+      text_color: raw.text_color || raw.theme_text || '#334155',
+      theme_text: raw.theme_text || raw.text_color || '#334155',
+      heading_color: raw.heading_color || raw.theme_heading || '#0f172a',
+      theme_heading: raw.theme_heading || raw.heading_color || '#0f172a',
+      header_bg_color: raw.header_bg_color || raw.theme_header || '#ffffff',
+      theme_header: raw.theme_header || raw.header_bg_color || '#ffffff',
+      footer_bg_color: raw.footer_bg_color || raw.theme_footer || '#0f172a',
+      theme_footer: raw.theme_footer || raw.footer_bg_color || '#0f172a',
+      website_logo: raw.website_logo || raw.logo_header || '',
+      logo_header: raw.logo_header || raw.website_logo || '',
+      logo_footer: raw.logo_footer || raw.website_logo || '',
+      favicon: raw.favicon || raw.logo_favicon || '',
+      logo_favicon: raw.logo_favicon || raw.favicon || '',
+    };
+  });
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -30,7 +56,31 @@ export const AdminThemeSettings: React.FC = () => {
   // Sync state if external changes happen
   useEffect(() => {
     const handleSync = () => {
-      setSettings(db.getSettings());
+      const raw = db.getSettings();
+      setSettings({
+        ...raw,
+        primary_color: raw.primary_color || raw.theme_primary || '#4f46e5',
+        theme_primary: raw.theme_primary || raw.primary_color || '#4f46e5',
+        secondary_color: raw.secondary_color || raw.theme_secondary || '#ffffff',
+        theme_secondary: raw.theme_secondary || raw.secondary_color || '#ffffff',
+        accent_color: raw.accent_color || raw.theme_accent || '#f59e0b',
+        theme_accent: raw.theme_accent || raw.accent_color || '#f59e0b',
+        bg_color: raw.bg_color || raw.theme_background || '#f8fafc',
+        theme_background: raw.theme_background || raw.bg_color || '#f8fafc',
+        text_color: raw.text_color || raw.theme_text || '#334155',
+        theme_text: raw.theme_text || raw.text_color || '#334155',
+        heading_color: raw.heading_color || raw.theme_heading || '#0f172a',
+        theme_heading: raw.theme_heading || raw.heading_color || '#0f172a',
+        header_bg_color: raw.header_bg_color || raw.theme_header || '#ffffff',
+        theme_header: raw.theme_header || raw.header_bg_color || '#ffffff',
+        footer_bg_color: raw.footer_bg_color || raw.theme_footer || '#0f172a',
+        theme_footer: raw.theme_footer || raw.footer_bg_color || '#0f172a',
+        website_logo: raw.website_logo || raw.logo_header || '',
+        logo_header: raw.logo_header || raw.website_logo || '',
+        logo_footer: raw.logo_footer || raw.website_logo || '',
+        favicon: raw.favicon || raw.logo_favicon || '',
+        logo_favicon: raw.logo_favicon || raw.favicon || '',
+      });
     };
     window.addEventListener('style1_data_changed', handleSync);
     return () => window.removeEventListener('style1_data_changed', handleSync);
@@ -56,10 +106,29 @@ export const AdminThemeSettings: React.FC = () => {
 
   // Helper to update specific root fields
   const updateField = (key: keyof StoreSettings, value: any) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setSettings((prev) => {
+      const updated = {
+        ...prev,
+        [key]: value,
+      };
+
+      // Direct real-time mapping to ensure the main stylesheet applies immediately
+      if (key === 'primary_color') updated.theme_primary = value;
+      if (key === 'secondary_color') updated.theme_secondary = value;
+      if (key === 'accent_color') updated.theme_accent = value;
+      if (key === 'bg_color') updated.theme_background = value;
+      if (key === 'text_color') updated.theme_text = value;
+      if (key === 'heading_color') updated.theme_heading = value;
+      if (key === 'header_bg_color') updated.theme_header = value;
+      if (key === 'footer_bg_color') updated.theme_footer = value;
+      if (key === 'website_logo') {
+        updated.logo_header = value;
+        updated.logo_footer = value;
+      }
+      if (key === 'favicon') updated.logo_favicon = value;
+
+      return updated;
+    });
   };
 
   // Helper to update slide fields

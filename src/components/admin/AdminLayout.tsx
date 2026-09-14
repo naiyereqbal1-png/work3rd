@@ -89,7 +89,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'ORDERS', label: 'Order History & Orders', icon: ShoppingBag },
     { id: 'DELIVERY_BOYS', label: 'Delivery Partner Portal', icon: Truck },
     { id: 'CUSTOMERS', label: 'Customers', icon: Users },
-    { id: 'HERO_CAROUSEL', label: 'Hero Carousel Banners', icon: ImageIcon, badge: 'Live' },
     { id: 'THEME_DESIGN', label: 'Website Theme & Design', icon: Sparkles, badge: 'Theme' },
     { id: 'SETTINGS', label: 'Store Settings', icon: Settings },
   ];
