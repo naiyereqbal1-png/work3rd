@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { OtpService } from '../../services/otpService';
+import { AdminHeroCarouselSettings } from './AdminHeroCarouselSettings';
+import { Image as ImageIcon } from 'lucide-react';
 
 interface AdminSettingsProps {
   onCatalogReset: () => void;
@@ -32,6 +34,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onCatalogReset }) 
   const [testMobile, setTestMobile] = useState('');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSendingTest, setIsSendingTest] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'CAROUSEL' | 'GENERAL'>('CAROUSEL');
 
   const handleTestSms = async () => {
     if (!testMobile || testMobile.replace(/\D/g, '').length < 10) {
@@ -90,15 +93,51 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onCatalogReset }) 
         </p>
       </div>
 
-      {saveSuccess && (
-        <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Store settings saved and synchronized live!</span>
-        </div>
-      )}
+      {/* Sub-Tabs: Hero Carousel vs Store Rules */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setSettingsTab('CAROUSEL')}
+          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${
+            settingsTab === 'CAROUSEL'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <ImageIcon className="w-4 h-4 text-amber-400" />
+          <span>HERO CAROUSEL SETTINGS</span>
+          <span className="text-[10px] bg-amber-400 text-slate-950 font-bold px-1.5 py-0.2 rounded">
+            Live
+          </span>
+        </button>
 
-      {/* Main Form */}
-      <form onSubmit={handleSave} className="space-y-6">
+        <button
+          type="button"
+          onClick={() => setSettingsTab('GENERAL')}
+          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${
+            settingsTab === 'GENERAL'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Settings className="w-4 h-4 text-indigo-400" />
+          <span>E-Commerce & Store Rules</span>
+        </button>
+      </div>
+
+      {settingsTab === 'CAROUSEL' ? (
+        <AdminHeroCarouselSettings />
+      ) : (
+        <>
+          {saveSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Store settings saved and synchronized live!</span>
+            </div>
+          )}
+
+          {/* Main Form */}
+          <form onSubmit={handleSave} className="space-y-6">
         {/* Shipping & Delivery */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
@@ -606,6 +645,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onCatalogReset }) 
           <span>{isResetting ? 'Restoring Catalog...' : 'Reset to 200+ Demo Garments'}</span>
         </button>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 };

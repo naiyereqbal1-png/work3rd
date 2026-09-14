@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShieldCheck, RotateCcw, Truck, Award, SlidersHorizontal, Store } from 'lucide-react';
+import { db } from '../../services/db';
 
 interface FooterProps {
   onSelectCategory: (slug: string) => void;
@@ -14,8 +15,19 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenDeliveryLogin,
   onOpenShopkeeper,
 }) => {
+  const [settings, setSettings] = useState(() => db.getSettings());
+
+  useEffect(() => {
+    setSettings(db.getSettings());
+    const handleDataChange = () => {
+      setSettings(db.getSettings());
+    };
+    window.addEventListener('style1_data_changed', handleDataChange);
+    return () => window.removeEventListener('style1_data_changed', handleDataChange);
+  }, []);
+
   return (
-    <footer id="style1-footer" className="bg-slate-950 text-slate-300 border-t border-slate-800 text-xs">
+    <footer id="style1-footer" className="bg-slate-950 text-slate-300 border-t border-slate-800 text-xs theme-bg-footer">
       {/* Service Highlights Strip */}
       <div className="border-b border-slate-900 py-6 px-4">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -65,16 +77,28 @@ export const Footer: React.FC<FooterProps> = ({
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-2 md:grid-cols-5 gap-8">
         {/* Brand & About */}
         <div className="col-span-2 space-y-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xs">
-              TH
+          {settings.logo_footer ? (
+            <img
+              src={settings.logo_footer}
+              alt="Footer Logo"
+              referrerPolicy="no-referrer"
+              className="h-10 max-w-[180px] object-contain mb-2"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xs">
+                TH
+              </div>
+              <div className="flex items-center gap-0.5">
+                <span className="font-black text-white text-lg tracking-wider">TRY</span>
+                <span className="font-black text-indigo-400 text-sm lowercase italic">at</span>
+                <span className="font-black text-rose-500 text-lg">HOME</span>
+              </div>
             </div>
-            <div className="flex items-center gap-0.5">
-              <span className="font-black text-white text-lg tracking-wider">TRY</span>
-              <span className="font-black text-indigo-400 text-sm lowercase italic">at</span>
-              <span className="font-black text-rose-500 text-lg">HOME</span>
-            </div>
-          </div>
+          )}
           <p className="text-slate-400 text-xs leading-relaxed max-w-sm">
             TRYatHOME is India’s modern garment marketplace delivering everyday essentials, denim,
             festive kurtis, streetwear, and kids apparel with our signature Try at Home doorstep service.

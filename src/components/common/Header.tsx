@@ -62,6 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
   isAdminView = false,
 }) => {
   const activeCustomer = currentCustomer || customer || null;
+  const [settings, setSettings] = useState(() => db.getSettings());
   const [categories, setCategories] = useState<Category[]>([]);
   const [pincode, setPincode] = useState('560001');
   const [isEditingPincode, setIsEditingPincode] = useState(false);
@@ -99,8 +100,10 @@ export const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     setCategories(db.getCategories());
+    setSettings(db.getSettings());
     const handleDataChange = () => {
       setCategories(db.getCategories());
+      setSettings(db.getSettings());
     };
     window.addEventListener('style1_data_changed', handleDataChange);
     return () => window.removeEventListener('style1_data_changed', handleDataChange);
@@ -142,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header id="style1-header" className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
+    <header id="style1-header" className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs theme-bg-header">
       {/* Top Banner / Merchant Bar */}
       <div className="bg-slate-900 text-slate-100 text-xs py-1.5 px-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -201,26 +204,40 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => onSelectCategory('')}
           className="cursor-pointer flex items-center gap-2 select-none group"
         >
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 flex items-center justify-center shadow-sm">
-            <span className="text-white font-black text-base tracking-wider">T</span>
-            <span className="text-amber-400 font-black text-base">H</span>
-          </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-0.5">
-              <span className="text-xl md:text-2xl font-black tracking-tight text-slate-900 group-hover:text-indigo-900 transition-colors">
-                TRY
-              </span>
-              <span className="text-base md:text-lg font-black text-indigo-600 lowercase italic">
-                at
-              </span>
-              <span className="text-xl md:text-2xl font-black text-rose-600">
-                HOME
-              </span>
-            </div>
-            <span className="text-[10px] tracking-widest text-slate-500 uppercase font-semibold -mt-1 hidden sm:block">
-              DOORSTEP TRY & BUY FASHION
-            </span>
-          </div>
+          {settings.logo_header ? (
+            <img
+              src={settings.logo_header}
+              alt="Brand Logo"
+              referrerPolicy="no-referrer"
+              className="h-10 max-w-[180px] object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <>
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 flex items-center justify-center shadow-sm">
+                <span className="text-white font-black text-base tracking-wider">T</span>
+                <span className="text-amber-400 font-black text-base">H</span>
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-0.5">
+                  <span className="text-xl md:text-2xl font-black tracking-tight text-slate-900 group-hover:text-indigo-900 transition-colors">
+                    TRY
+                  </span>
+                  <span className="text-base md:text-lg font-black text-indigo-600 lowercase italic">
+                    at
+                  </span>
+                  <span className="text-xl md:text-2xl font-black text-rose-600">
+                    HOME
+                  </span>
+                </div>
+                <span className="text-[10px] tracking-widest text-slate-500 uppercase font-semibold -mt-1 hidden sm:block">
+                  DOORSTEP TRY & BUY FASHION
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Delivery Location Pincode (Indian e-commerce pattern) */}

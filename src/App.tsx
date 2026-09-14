@@ -7,6 +7,7 @@ import { Customer, AdminUser, Product, Category, Order, DeliveryBoy, AuthSession
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { MobileBottomNav } from './components/common/MobileBottomNav';
+import { DynamicThemeStyles } from './components/common/DynamicThemeStyles';
 
 // Customer Components
 import { CustomerHomeView } from './components/catalog/CustomerHomeView';
@@ -341,7 +342,8 @@ export default function App() {
   }
 
   return (
-    <div id="style1-customer-root" className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div id="style1-customer-root" className="min-h-screen bg-slate-50 flex flex-col font-sans theme-bg-body">
+      <DynamicThemeStyles />
       {/* Shopkeeper preview banner when shopkeeper views storefront */}
       {authSession.role === 'SHOPKEEPER' && (
         <div className="bg-amber-950 border-b border-amber-500/30 text-white px-4 py-2 text-xs flex items-center justify-between sticky top-0 z-50">

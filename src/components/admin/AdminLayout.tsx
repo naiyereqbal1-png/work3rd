@@ -14,6 +14,7 @@ import {
   X,
   Store,
   Truck,
+  Sparkles,
 } from 'lucide-react';
 import { AdminUser, Category, Product } from '../../types';
 import { db } from '../../services/db';
@@ -27,6 +28,9 @@ import { AdminDeliveryBoys } from './AdminDeliveryBoys';
 import { AdminCustomers } from './AdminCustomers';
 import { AdminSettings } from './AdminSettings';
 import { AdminShopkeepers } from './AdminShopkeepers';
+import { AdminHeroCarouselSettings } from './AdminHeroCarouselSettings';
+import { AdminThemeSettings } from './AdminThemeSettings';
+import { Image as ImageIcon } from 'lucide-react';
 
 interface AdminLayoutProps {
   admin: AdminUser;
@@ -85,6 +89,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'ORDERS', label: 'Order History & Orders', icon: ShoppingBag },
     { id: 'DELIVERY_BOYS', label: 'Delivery Partner Portal', icon: Truck },
     { id: 'CUSTOMERS', label: 'Customers', icon: Users },
+    { id: 'HERO_CAROUSEL', label: 'Hero Carousel Banners', icon: ImageIcon, badge: 'Live' },
+    { id: 'THEME_DESIGN', label: 'Website Theme & Design', icon: Sparkles, badge: 'Theme' },
     { id: 'SETTINGS', label: 'Store Settings', icon: Settings },
   ];
 
@@ -262,6 +268,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             {activeTab === 'DELIVERY_BOYS' && <AdminDeliveryBoys />}
 
             {activeTab === 'CUSTOMERS' && <AdminCustomers />}
+
+            {activeTab === 'HERO_CAROUSEL' && <AdminHeroCarouselSettings />}
+
+            {activeTab === 'THEME_DESIGN' && <AdminThemeSettings />}
 
             {activeTab === 'SETTINGS' && (
               <AdminSettings

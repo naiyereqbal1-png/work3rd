@@ -67,11 +67,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               {product.discount_percentage}% OFF
             </span>
           )}
-          {product.tags && product.tags.length > 0 && (
-            <span className="bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded-sm">
-              {product.tags[0]}
-            </span>
-          )}
+          {/* Tag badge hidden as requested to keep the storefront clean */}
         </div>
 
         {/* Wishlist button */}

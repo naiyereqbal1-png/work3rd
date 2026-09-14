@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   SlidersHorizontal,
   ChevronDown,
@@ -12,6 +12,8 @@ import {
 import { Category, Product } from '../../types';
 import { ProductCard } from './ProductCard';
 import { FilterSidebar, FilterState } from './FilterSidebar';
+import { HeroCarousel } from './HeroCarousel';
+import { db } from '../../services/db';
 
 interface CustomerHomeViewProps {
   products: Product[];
@@ -41,6 +43,8 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
   onToggleWishlist,
 }) => {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [settings, setSettings] = useState(() => db.getSettings());
+  const [heroBg, setHeroBg] = useState(() => db.getHeroBackgroundImage());
   const [filters, setFilters] = useState<FilterState>({
     categorySlug: activeCategorySlug,
     gender: 'All',
@@ -55,10 +59,109 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
     sort: 'relevance',
   });
 
+  // Festival banners validator
+  const activeFestivalBanners = useMemo(() => {
+    const banners = settings.festival_banners || [];
+    const now = new Date();
+    return banners.filter((b) => {
+      if (!b.enabled || !b.bannerImageUrl) return false;
+      if (b.startDate) {
+        const start = new Date(b.startDate);
+        if (now < start) return false;
+      }
+      if (b.endDate) {
+        const end = new Date(b.endDate);
+        if (now > end) return false;
+      }
+      return true;
+    });
+  }, [settings]);
+
+  // Advertisement banners retriever grouped by position and sorted by order/priority
+  const getAdBannersForPosition = (position: string) => {
+    const ads = settings.advertisement_banners || [];
+    const now = new Date();
+    return ads
+      .filter((ad) => {
+        if (!ad.enabled || ad.position !== position || !ad.imageUrl) return false;
+        if (ad.startDate) {
+          const start = new Date(ad.startDate);
+          if (now < start) return false;
+        }
+        if (ad.endDate) {
+          const end = new Date(ad.endDate);
+          if (now > end) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.order !== b.order) {
+          return a.order - b.order;
+        }
+        return (b.priority || 0) - (a.priority || 0);
+      });
+  };
+
+  const renderAdBanners = (position: string) => {
+    const ads = getAdBannersForPosition(position);
+    if (ads.length === 0) return null;
+    return (
+      <div className="flex flex-col gap-4 my-6">
+        {ads.map((ad) => (
+          <div
+            key={ad.id}
+            className="relative w-full rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs bg-white flex flex-col sm:flex-row items-center gap-4 p-4 hover:shadow-md transition-shadow theme-bg-card"
+          >
+            {ad.imageUrl && (
+              <img
+                src={ad.imageUrl}
+                alt={ad.title || 'Ad'}
+                className="w-full sm:w-48 h-32 object-cover rounded-xl shrink-0"
+                referrerPolicy="no-referrer"
+              />
+            )}
+            <div className="space-y-1.5 flex-1 min-w-0">
+              {ad.title && (
+                <h4 className="text-lg font-bold text-slate-900 leading-tight theme-text-heading">
+                  {ad.title}
+                </h4>
+              )}
+              {ad.description && (
+                <p className="text-slate-600 text-xs sm:text-sm line-clamp-2 theme-text-body">
+                  {ad.description}
+                </p>
+              )}
+              {ad.buttonText && (
+                <a
+                  href={ad.buttonLink || '#'}
+                  className="inline-block mt-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                >
+                  {ad.buttonText} &rarr;
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   // Sync prop changes
   useEffect(() => {
     setFilters((prev) => ({ ...prev, categorySlug: activeCategorySlug }));
   }, [activeCategorySlug]);
+
+  // Sync with store settings updates
+  useEffect(() => {
+    const handleUpdate = () => {
+      setHeroBg(db.getHeroBackgroundImage());
+      setSettings(db.getSettings());
+    };
+    window.addEventListener('style1_data_changed', handleUpdate);
+    return () => {
+      window.removeEventListener('style1_data_changed', handleUpdate);
+    };
+  }, []);
 
   // Deal countdown timer (hours, mins, secs)
   const [timeLeft, setTimeLeft] = useState({ hours: 7, minutes: 24, seconds: 18 });
@@ -155,7 +258,19 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
     <div id="customer-home-view" className="bg-slate-50 min-h-screen pb-16">
       {/* Hero Banner Section (Show when no specific search or filter is active) */}
       {!searchQuery && !filters.categorySlug && (
-        <section id="hero-banner-section" className="relative bg-slate-900 text-white overflow-hidden">
+        <section
+          id="hero-banner-section"
+          className="relative bg-slate-950 text-white overflow-hidden transition-all duration-500"
+          style={
+            heroBg
+              ? {
+                  backgroundImage: `linear-gradient(to right, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.9)), url("${heroBg}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }
+              : undefined
+          }
+        >
           <div className="max-w-7xl mx-auto px-4 py-10 md:py-16 grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
             {/* Left Content */}
             <div className="md:col-span-7 space-y-4">
@@ -209,43 +324,53 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
               </div>
             </div>
 
-            {/* Right Visual Image Bento */}
-            <div className="md:col-span-5 grid grid-cols-2 gap-3 relative">
-              <div className="space-y-3">
-                <div className="h-44 rounded-2xl overflow-hidden border border-slate-700 shadow-lg">
-                  <img
-                    src="https://images.unsplash.com/photo-1542272604-787c3835535d?w=600&q=80"
-                    alt="Denim Jeans"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="h-40 rounded-2xl overflow-hidden border border-slate-700 shadow-lg">
-                  <img
-                    src="https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&q=80"
-                    alt="Cotton T-shirt"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-              <div className="space-y-3 pt-6">
-                <div className="h-40 rounded-2xl overflow-hidden border border-slate-700 shadow-lg">
-                  <img
-                    src="https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&q=80"
-                    alt="Linen Shirt"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="h-44 rounded-2xl overflow-hidden border border-slate-700 shadow-lg">
-                  <img
-                    src="https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=600&q=80"
-                    alt="Lucknowi Kurti"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
+            {/* Right Visual 3-Slide Hero Carousel */}
+            <div className="md:col-span-5 relative flex items-center justify-center">
+              <HeroCarousel onSelectCategory={onSelectCategory} />
             </div>
           </div>
         </section>
+      )}
+
+      {/* Dynamic Festival Banners & Hero Below Ad Banners */}
+      {!searchQuery && !filters.categorySlug && (
+        <div className="max-w-7xl mx-auto px-4 mt-6">
+          {/* Active Festival Banners */}
+          {activeFestivalBanners.map((b, idx) => (
+            <div
+              key={idx}
+              className="w-full bg-gradient-to-r from-rose-600 via-orange-500 to-amber-500 text-white py-8 px-6 rounded-2xl shadow-xl mb-6 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative"
+            >
+              <div className="absolute inset-0 bg-black/10 mix-blend-multiply" />
+              {b.bannerImageUrl && (
+                <img
+                  src={b.bannerImageUrl}
+                  alt={b.festivalName}
+                  className="absolute right-0 top-0 h-full w-1/3 object-cover opacity-25 hidden md:block pointer-events-none"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <div className="relative z-10 space-y-2 max-w-2xl">
+                <div className="inline-block bg-white/20 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
+                  {b.festivalName} Specials
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-black tracking-tight">{b.title}</h3>
+                <p className="text-white/90 text-sm sm:text-base font-semibold">{b.subtitle}</p>
+              </div>
+              {b.buttonText && (
+                <a
+                  href={b.buttonLink || '#'}
+                  className="relative z-10 shrink-0 px-6 py-3 bg-white text-slate-950 font-black text-sm rounded-xl hover:bg-slate-50 transition-colors shadow-lg"
+                >
+                  {b.buttonText}
+                </a>
+              )}
+            </div>
+          ))}
+
+          {/* Ad Banners: Hero Below */}
+          {renderAdBanners('hero_below')}
+        </div>
       )}
 
       {/* Category Story Circles Carousel (Flipkart / Myntra Style) */}
@@ -306,8 +431,18 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
         </div>
       </section>
 
+      {/* Ad Banners: Category Section */}
+      {!searchQuery && !filters.categorySlug && (
+        <div className="max-w-7xl mx-auto px-4 mt-4">
+          {renderAdBanners('category_section')}
+        </div>
+      )}
+
       {/* Main Marketplace Area */}
       <main className="max-w-7xl mx-auto px-4 pt-6">
+        {/* Ad Banners: Product Section */}
+        {renderAdBanners('product_section')}
+
         {/* Active Title & Controls Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200 mb-6">
           <div>
@@ -430,6 +565,9 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
           </div>
         )}
 
+        {/* Ad Banners: Middle Banner */}
+        {renderAdBanners('middle_banner')}
+
         {/* Layout Grid: Sidebar + Product Grid */}
         <div className="flex gap-6 items-start">
           {/* Desktop Filter Sidebar */}
@@ -500,6 +638,9 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* Ad Banners: Bottom Banner */}
+        {renderAdBanners('bottom_banner')}
       </main>
     </div>
   );

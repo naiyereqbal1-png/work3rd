@@ -897,7 +897,107 @@ class DatabaseService {
     const updated = { ...current, ...newSettings };
     this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
     notifyDataChanged();
+    supabaseSaveSettings(updated).catch((err) => {
+      console.warn('[db] Background supabaseSaveSettings warning:', err);
+    });
     return updated;
+  }
+
+  async updateThemeAndDesignSettingsAsync(
+    newSettings: Partial<StoreSettings>
+  ): Promise<{ success: boolean; message: string }> {
+    // 1. Authorization check
+    const currentAdmin = this.getCurrentAdmin();
+    if (!currentAdmin || !['super_admin', 'admin'].includes(currentAdmin.role)) {
+      throw new Error('Unauthorized: Only administrators can update website theme & design settings');
+    }
+
+    // 2. Prepare updated settings
+    const current = this.getSettings();
+    const updated: StoreSettings = {
+      ...current,
+      ...newSettings,
+    };
+
+    // 3. Persist directly to Supabase database (Source of truth)
+    const saved = await supabaseSaveSettings(updated);
+    if (!saved) {
+      throw new Error('Failed to save website theme & design settings to Supabase database.');
+    }
+
+    // 4. Update memory & broadcast live event to customer panel
+    this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+    notifyDataChanged();
+
+    return {
+      success: true,
+      message: 'Website settings updated successfully.',
+    };
+  }
+
+  async updateHeroCarouselSettingsAsync(
+    hero1: string,
+    hero2: string,
+    hero3: string,
+    heroBg?: string
+  ): Promise<{ success: boolean; message: string }> {
+    // 1. Authorization check
+    const currentAdmin = this.getCurrentAdmin();
+    if (!currentAdmin || !['super_admin', 'admin'].includes(currentAdmin.role)) {
+      throw new Error('Unauthorized: Only administrators can update hero carousel settings');
+    }
+
+    // 2. Prepare updated settings
+    const current = this.getSettings();
+    const updated: StoreSettings = {
+      ...current,
+      hero_image_1: (hero1 || '').trim(),
+      hero_image_2: (hero2 || '').trim(),
+      hero_image_3: (hero3 || '').trim(),
+      hero_background_image: (heroBg || '').trim(),
+    };
+
+    // 3. Persist directly to Supabase database (Source of truth)
+    const saved = await supabaseSaveSettings(updated);
+    if (!saved) {
+      throw new Error('Failed to save hero carousel settings to Supabase database.');
+    }
+
+    // 4. Update memory & broadcast live event to customer panel
+    this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+    notifyDataChanged();
+
+    return {
+      success: true,
+      message: 'Hero carousel settings updated successfully.',
+    };
+  }
+
+  getHeroBackgroundImage(): string {
+    const settings = this.getSettings();
+    return (settings.hero_background_image || '').trim();
+  }
+
+  getHeroCarouselImages(): [string, string, string] {
+    const settings = this.getSettings();
+    // Default fallback images preserve the existing black/dark aesthetic and bento imagery
+    const DEFAULT_HERO_1 = 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=1200&q=80';
+    const DEFAULT_HERO_2 = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1200&q=80';
+    const DEFAULT_HERO_3 = 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=1200&q=80';
+
+    const img1 = settings.hero_image_1 && settings.hero_image_1.trim().length > 0
+      ? settings.hero_image_1.trim()
+      : DEFAULT_HERO_1;
+
+    const img2 = settings.hero_image_2 && settings.hero_image_2.trim().length > 0
+      ? settings.hero_image_2.trim()
+      : DEFAULT_HERO_2;
+
+    const img3 = settings.hero_image_3 && settings.hero_image_3.trim().length > 0
+      ? settings.hero_image_3.trim()
+      : DEFAULT_HERO_3;
+
+    return [img1, img2, img3];
   }
 
   // ===================== CATEGORIES =====================

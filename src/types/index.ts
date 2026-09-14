@@ -512,6 +512,11 @@ export interface StoreSettings {
   try_at_home_duration_minutes?: number;
   try_at_home_auto_close_on_expiry?: boolean;
   try_at_home_charge?: number; // Non-refundable Try at Home Convenience Fee (₹)
+  // Hero Carousel Configuration (3-Slide Hero Banner)
+  hero_image_1?: string;
+  hero_image_2?: string;
+  hero_image_3?: string;
+  hero_background_image?: string;
   // SMS & OTP Gateway Configuration (Configurable & change later)
   sms_provider?: 'demo' | 'twilio' | 'fast2sms' | 'msg91';
   sms_api_key?: string;
@@ -519,6 +524,74 @@ export interface StoreSettings {
   twilio_account_sid?: string;
   twilio_auth_token?: string;
   twilio_from_phone?: string;
+
+  // Centralized Theme & Colors
+  theme_primary?: string;
+  theme_secondary?: string;
+  theme_accent?: string;
+  theme_background?: string;
+  theme_card_background?: string;
+  theme_text?: string;
+  theme_heading?: string;
+  theme_button?: string;
+  theme_button_text?: string;
+  theme_border?: string;
+  theme_header?: string;
+  theme_footer?: string;
+
+  // Centralized Branding Logos & Images
+  logo_website?: string;
+  logo_favicon?: string;
+  logo_header?: string;
+  logo_footer?: string;
+
+  // Centralized Banner Configurations
+  hero_slides?: HeroSlideConfig[];
+  festival_banners?: FestivalBannerConfig[];
+  advertisement_banners?: AdvertisementBannerConfig[];
+
+  // Unified Appearance Customizations
+  theme_typography?: { fontFamilyDisplay?: string; fontFamilyBody?: string; fontScale?: number };
+  theme_ui_style?: { borderRadius?: 'none' | 'sm' | 'md' | 'lg' | 'full'; borderWidth?: 'none' | 'thin' | 'thick' };
+  theme_mobile_appearance?: { denseMode?: boolean; showQuickActions?: boolean };
+}
+
+export interface HeroSlideConfig {
+  url: string;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+  buttonLink: string;
+  enabled: boolean;
+}
+
+export interface FestivalBannerConfig {
+  id?: string;
+  festivalName: string;
+  bannerImageUrl: string;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+  buttonLink: string;
+  startDate: string;
+  endDate: string;
+  enabled: boolean;
+}
+
+export interface AdvertisementBannerConfig {
+  id: string;
+  name: string;
+  imageUrl: string;
+  title: string;
+  description: string;
+  buttonText: string;
+  buttonLink: string;
+  position: 'hero_below' | 'product_section' | 'category_section' | 'middle_banner' | 'bottom_banner';
+  startDate: string;
+  endDate: string;
+  priority: number;
+  enabled: boolean;
+  order: number;
 }
 
 export interface DashboardStats {

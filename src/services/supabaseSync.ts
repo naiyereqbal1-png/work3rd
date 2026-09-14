@@ -125,7 +125,54 @@ export async function fetchFullDataFromSupabase(): Promise<SupabaseFullData | nu
     ]);
 
     // 1. Settings
-    const settings: StoreSettings | null = (settingsRes?.data as StoreSettings) || null;
+    let settings: StoreSettings | null = (settingsRes?.data as StoreSettings) || null;
+    if (settings && settings.store_tagline) {
+      try {
+        const parsed = JSON.parse(settings.store_tagline);
+        if (parsed && typeof parsed === 'object') {
+          settings.hero_image_1 = parsed.hero_image_1 || '';
+          settings.hero_image_2 = parsed.hero_image_2 || '';
+          settings.hero_image_3 = parsed.hero_image_3 || '';
+          settings.hero_background_image = parsed.hero_background_image || '';
+
+          // Theme Colors
+          settings.theme_primary = parsed.theme_primary || '';
+          settings.theme_secondary = parsed.theme_secondary || '';
+          settings.theme_accent = parsed.theme_accent || '';
+          settings.theme_background = parsed.theme_background || '';
+          settings.theme_card_background = parsed.theme_card_background || '';
+          settings.theme_text = parsed.theme_text || '';
+          settings.theme_heading = parsed.theme_heading || '';
+          settings.theme_button = parsed.theme_button || '';
+          settings.theme_button_text = parsed.theme_button_text || '';
+          settings.theme_border = parsed.theme_border || '';
+          settings.theme_header = parsed.theme_header || '';
+          settings.theme_footer = parsed.theme_footer || '';
+
+          // Branding Logos
+          settings.logo_website = parsed.logo_website || '';
+          settings.logo_favicon = parsed.logo_favicon || '';
+          settings.logo_header = parsed.logo_header || '';
+          settings.logo_footer = parsed.logo_footer || '';
+
+          // Arrays of configs
+          settings.hero_slides = parsed.hero_slides || [];
+          settings.festival_banners = parsed.festival_banners || [];
+          settings.advertisement_banners = parsed.advertisement_banners || [];
+
+          // Typography & styles
+          settings.theme_typography = parsed.theme_typography || {};
+          settings.theme_ui_style = parsed.theme_ui_style || {};
+          settings.theme_mobile_appearance = parsed.theme_mobile_appearance || {};
+
+          if (parsed.tagline) {
+            settings.store_tagline = parsed.tagline;
+          }
+        }
+      } catch {
+        // Plain string tagline, keep as is
+      }
+    }
 
     // 2. Categories
     const categories: Category[] = (categoriesRes?.data as Category[]) || [];
@@ -795,10 +842,48 @@ export async function supabaseSaveDeliveryBoy(d: DeliveryBoy): Promise<boolean> 
 
 export async function supabaseSaveSettings(settings: StoreSettings): Promise<boolean> {
   try {
+    const taglineValue = JSON.stringify({
+      tagline: settings.store_tagline || 'India’s Modern Garment & Fashion Destination • Try at Home',
+      hero_image_1: settings.hero_image_1 || '',
+      hero_image_2: settings.hero_image_2 || '',
+      hero_image_3: settings.hero_image_3 || '',
+      hero_background_image: settings.hero_background_image || '',
+
+      // Centralized Theme Colors
+      theme_primary: settings.theme_primary || '',
+      theme_secondary: settings.theme_secondary || '',
+      theme_accent: settings.theme_accent || '',
+      theme_background: settings.theme_background || '',
+      theme_card_background: settings.theme_card_background || '',
+      theme_text: settings.theme_text || '',
+      theme_heading: settings.theme_heading || '',
+      theme_button: settings.theme_button || '',
+      theme_button_text: settings.theme_button_text || '',
+      theme_border: settings.theme_border || '',
+      theme_header: settings.theme_header || '',
+      theme_footer: settings.theme_footer || '',
+
+      // Branding Logos & Images
+      logo_website: settings.logo_website || '',
+      logo_favicon: settings.logo_favicon || '',
+      logo_header: settings.logo_header || '',
+      logo_footer: settings.logo_footer || '',
+
+      // Slides and Banners arrays
+      hero_slides: settings.hero_slides || [],
+      festival_banners: settings.festival_banners || [],
+      advertisement_banners: settings.advertisement_banners || [],
+
+      // Extra customizations
+      theme_typography: settings.theme_typography || {},
+      theme_ui_style: settings.theme_ui_style || {},
+      theme_mobile_appearance: settings.theme_mobile_appearance || {},
+    });
+
     const { error } = await supabase.from("store_settings").upsert({
       id: 1,
       store_name: settings.store_name,
-      store_tagline: settings.store_tagline,
+      store_tagline: taglineValue,
       contact_email: settings.contact_email,
       contact_phone: settings.contact_phone,
       delivery_charge: settings.delivery_charge,
@@ -813,8 +898,9 @@ export async function supabaseSaveSettings(settings: StoreSettings): Promise<boo
       try_at_home_charge: settings.try_at_home_charge,
       sms_provider: settings.sms_provider,
       sms_api_key: settings.sms_api_key,
-      sms_sender: settings.sms_sender_id,
+      sms_sender_id: settings.sms_sender_id,
       twilio_account_sid: settings.twilio_account_sid,
+      twilio_auth_token: settings.twilio_auth_token,
       twilio_from_phone: settings.twilio_from_phone,
       updated_at: new Date().toISOString(),
     });
