@@ -132,6 +132,15 @@ export const notifyDataChanged = () => {
 
 class DatabaseService {
   private memoryStore: Record<string, string> = {};
+  public isInitialSyncDone: boolean = false;
+  private initialSyncPromise: Promise<boolean> | null = null;
+
+  public waitForInitialSync(): Promise<boolean> {
+    if (this.isInitialSyncDone) return Promise.resolve(true);
+    if (this.initialSyncPromise) return this.initialSyncPromise;
+    this.initialSyncPromise = this.syncFromSupabase();
+    return this.initialSyncPromise;
+  }
 
   private getStorageItem = (key: string): string | null => {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -166,7 +175,10 @@ class DatabaseService {
 
   async syncFromSupabase(): Promise<boolean> {
     const cloud = await fetchFullDataFromSupabase();
-    if (!cloud) return false;
+    if (!cloud) {
+      this.isInitialSyncDone = true;
+      return false;
+    }
 
     if (cloud.settings) {
       this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(cloud.settings));
@@ -201,21 +213,40 @@ class DatabaseService {
     }
     if (cloud.orders && cloud.orders.length > 0) {
       const existing = this.getOrders();
-      const cloudIds = new Set(cloud.orders.map((o) => o.id));
+      const cloudOrderKeys = new Set(cloud.orders.map((o) => o.order_id || o.id));
       const merged = [...cloud.orders];
       for (const item of existing) {
-        if (!cloudIds.has(item.id)) merged.push(item);
+        const itemKey = item.order_id || item.id;
+        if (!cloudOrderKeys.has(itemKey)) merged.push(item);
       }
       this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(merged));
     }
     if (cloud.deliveryBoys && cloud.deliveryBoys.length > 0) {
       const existing = this.getDeliveryBoys();
       const cloudIds = new Set(cloud.deliveryBoys.map((d) => d.id));
+      const cloudBoyIds = new Set(cloud.deliveryBoys.map((d) => d.delivery_boy_id));
       const merged = [...cloud.deliveryBoys];
       for (const item of existing) {
-        if (!cloudIds.has(item.id)) merged.push(item);
+        if (!cloudIds.has(item.id) && (!item.delivery_boy_id || !cloudBoyIds.has(item.delivery_boy_id))) {
+          merged.push(item);
+        }
       }
       this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(merged));
+
+      // Keep active delivery partner session synchronized
+      const currentBoy = this.getCurrentDeliveryBoy();
+      if (currentBoy) {
+        const cleanMobile = (currentBoy.mobile || '').replace(/\D/g, '');
+        const matched = cloud.deliveryBoys.find(
+          (d) =>
+            d.id === currentBoy.id ||
+            d.delivery_boy_id === currentBoy.delivery_boy_id ||
+            (cleanMobile && (d.mobile || '').replace(/\D/g, '') === cleanMobile)
+        );
+        if (matched) {
+          this.setStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(matched));
+        }
+      }
     }
     if (cloud.shopkeepers && cloud.shopkeepers.length > 0) {
       const existing = this.getShopkeepers();
@@ -232,6 +263,8 @@ class DatabaseService {
     if (cloud.stockTransactions && cloud.stockTransactions.length > 0) {
       this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(cloud.stockTransactions));
     }
+
+    this.isInitialSyncDone = true;
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('style1_data_changed'));
@@ -250,7 +283,7 @@ class DatabaseService {
     }
 
     // Initial fetch from live Supabase DB on application startup
-    this.syncFromSupabase();
+    this.initialSyncPromise = this.syncFromSupabase();
 
     // Subscribe to realtime database updates across all devices
     supabaseSubscribeRealtime(() => {
@@ -3605,9 +3638,19 @@ class DatabaseService {
     }
 
     this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-    supabaseUpdateOrderStatus(orders[idx].order_id, newStatus, changedBy, notes).catch(() => {});
+    supabaseSaveOrder(orders[idx]).catch(() => {
+      supabaseUpdateOrderStatus(orders[idx].order_id, newStatus, changedBy, notes).catch(() => {});
+    });
     notifyDataChanged();
     return orders[idx];
+  }
+
+  async updateOrderStatusAsync(orderId: string, newStatus: OrderStatus, changedBy = 'Admin', notes?: string): Promise<Order | null> {
+    const ord = this.updateOrderStatus(orderId, newStatus, changedBy, notes);
+    if (ord) {
+      await supabaseSaveOrder(ord);
+    }
+    return ord;
   }
 
   updateOrderPaymentStatus(orderId: string, paymentStatus: PaymentStatus, changedBy = 'Admin', notes?: string): Order | null {
@@ -4131,8 +4174,22 @@ class DatabaseService {
   }
 
   getDeliveryBoyById(id: string): DeliveryBoy | null {
+    if (!id) return null;
+    const cleanId = String(id).trim().toLowerCase();
     const all = this.getDeliveryBoys();
-    return all.find((d) => d.id === id || d.delivery_boy_id === id) || null;
+    return (
+      all.find(
+        (d) =>
+          d.id.toLowerCase() === cleanId ||
+          (d.delivery_boy_id && d.delivery_boy_id.toLowerCase() === cleanId) ||
+          (d.mobile && d.mobile.replace(/\D/g, '') === cleanId.replace(/\D/g, ''))
+      ) || null
+    );
+  }
+
+  setCurrentDeliveryBoy(boy: DeliveryBoy): void {
+    this.setStorageItem(STORAGE_KEYS.CURRENT_DELIVERY_BOY, JSON.stringify(boy));
+    notifyDataChanged();
   }
 
   addDeliveryBoy(data: Partial<DeliveryBoy>): DeliveryBoy {
@@ -4359,15 +4416,16 @@ class DatabaseService {
     const boy = this.getDeliveryBoyById(deliveryBoyId);
     if (!boy) return null;
 
+    const canonicalBoyId = boy.delivery_boy_id || boy.id;
     const previousBoyId = orders[idx].assigned_delivery_boy_id;
-    orders[idx].assigned_delivery_boy_id = boy.id;
+    orders[idx].assigned_delivery_boy_id = canonicalBoyId;
     orders[idx].assigned_delivery_boy_name = boy.name;
     orders[idx].assigned_delivery_boy_mobile = boy.mobile;
     orders[idx].delivery_boy_assigned_at = new Date().toISOString();
 
     // Preserve original delivery boy association for returns
     if (!orders[idx].original_delivery_boy_id) {
-      orders[idx].original_delivery_boy_id = boy.id;
+      orders[idx].original_delivery_boy_id = canonicalBoyId;
       orders[idx].original_delivery_boy_name = boy.name;
       orders[idx].original_delivery_boy_mobile = boy.mobile;
     }
@@ -4399,10 +4457,10 @@ class DatabaseService {
       const allBoys = this.getDeliveryBoys();
       allBoys.forEach((b) => {
         if (!b.assigned_orders) b.assigned_orders = [];
-        if (previousBoyId && b.id === previousBoyId && b.id !== boy.id) {
+        if (previousBoyId && (b.id === previousBoyId || b.delivery_boy_id === previousBoyId) && b.id !== boy.id && b.delivery_boy_id !== canonicalBoyId) {
           b.assigned_orders = b.assigned_orders.filter((oid) => oid !== orders[idx].order_id);
         }
-        if (b.id === boy.id) {
+        if (b.id === boy.id || b.delivery_boy_id === canonicalBoyId) {
           if (!b.assigned_orders.includes(orders[idx].order_id)) {
             b.assigned_orders.push(orders[idx].order_id);
           }
@@ -4415,7 +4473,16 @@ class DatabaseService {
 
     this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
+    supabaseSaveOrder(orders[idx]).catch((err) => console.error("Supabase sync failed for assignOrderToDeliveryBoy", err));
     return orders[idx];
+  }
+
+  async assignOrderToDeliveryBoyAsync(orderId: string, deliveryBoyId: string): Promise<Order | null> {
+    const ord = this.assignOrderToDeliveryBoy(orderId, deliveryBoyId);
+    if (ord) {
+      await supabaseSaveOrder(ord);
+    }
+    return ord;
   }
 
   unassignOrderFromDeliveryBoy(orderId: string): Order | null {
@@ -4451,7 +4518,7 @@ class DatabaseService {
       try {
         const allBoys = this.getDeliveryBoys();
         allBoys.forEach((b) => {
-          if (b.id === previousBoyId && b.assigned_orders) {
+          if ((b.id === previousBoyId || b.delivery_boy_id === previousBoyId) && b.assigned_orders) {
             b.assigned_orders = b.assigned_orders.filter((oid) => oid !== orders[idx].order_id);
           }
         });
@@ -4463,7 +4530,16 @@ class DatabaseService {
 
     this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
+    supabaseSaveOrder(orders[idx]).catch((err) => console.error("Supabase sync failed for unassignOrderFromDeliveryBoy", err));
     return orders[idx];
+  }
+
+  async unassignOrderFromDeliveryBoyAsync(orderId: string): Promise<Order | null> {
+    const ord = this.unassignOrderFromDeliveryBoy(orderId);
+    if (ord) {
+      await supabaseSaveOrder(ord);
+    }
+    return ord;
   }
 
   markOrderOutForDelivery(orderId: string, deliveryBoyId: string): Order | null {
@@ -4472,14 +4548,16 @@ class DatabaseService {
     if (idx === -1) return null;
 
     const boy = this.getDeliveryBoyById(deliveryBoyId);
+    const canonicalBoyId = boy ? (boy.delivery_boy_id || boy.id) : deliveryBoyId;
+
     orders[idx].order_status = 'Out for Delivery';
     orders[idx].updated_at = new Date().toISOString();
     if (boy) {
-      orders[idx].assigned_delivery_boy_id = boy.id;
+      orders[idx].assigned_delivery_boy_id = canonicalBoyId;
       orders[idx].assigned_delivery_boy_name = boy.name;
       orders[idx].assigned_delivery_boy_mobile = boy.mobile;
       if (!orders[idx].original_delivery_boy_id) {
-        orders[idx].original_delivery_boy_id = boy.id;
+        orders[idx].original_delivery_boy_id = canonicalBoyId;
         orders[idx].original_delivery_boy_name = boy.name;
         orders[idx].original_delivery_boy_mobile = boy.mobile;
       }
@@ -4504,7 +4582,16 @@ class DatabaseService {
 
     this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
+    supabaseSaveOrder(orders[idx]).catch((err) => console.error("Supabase sync failed for markOrderOutForDelivery", err));
     return orders[idx];
+  }
+
+  async markOrderOutForDeliveryAsync(orderId: string, deliveryBoyId: string): Promise<Order | null> {
+    const ord = this.markOrderOutForDelivery(orderId, deliveryBoyId);
+    if (ord) {
+      await supabaseSaveOrder(ord);
+    }
+    return ord;
   }
 
   completeOrderDelivery(orderId: string, deliveryBoyId: string, notes = 'Delivered to recipient with cash collected/confirmed'): Order | null {
@@ -4513,16 +4600,17 @@ class DatabaseService {
     if (idx === -1) return null;
 
     const boy = this.getDeliveryBoyById(deliveryBoyId);
+    const canonicalBoyId = boy ? (boy.delivery_boy_id || boy.id) : deliveryBoyId;
 
     orders[idx].order_status = 'Delivered';
     orders[idx].updated_at = new Date().toISOString();
-    orders[idx].assigned_delivery_boy_id = deliveryBoyId;
+    orders[idx].assigned_delivery_boy_id = canonicalBoyId;
     if (boy) {
       orders[idx].assigned_delivery_boy_name = boy.name;
       orders[idx].assigned_delivery_boy_mobile = boy.mobile;
     }
     // Lock original delivery boy to the delivering partner
-    orders[idx].original_delivery_boy_id = orders[idx].original_delivery_boy_id || deliveryBoyId;
+    orders[idx].original_delivery_boy_id = orders[idx].original_delivery_boy_id || canonicalBoyId;
     if (boy) {
       orders[idx].original_delivery_boy_name = orders[idx].original_delivery_boy_name || boy.name;
       orders[idx].original_delivery_boy_mobile = orders[idx].original_delivery_boy_mobile || boy.mobile;
@@ -4580,7 +4668,16 @@ class DatabaseService {
 
     this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     notifyDataChanged();
+    supabaseSaveOrder(orders[idx]).catch((err) => console.error("Supabase sync failed for completeOrderDelivery", err));
     return orders[idx];
+  }
+
+  async completeOrderDeliveryAsync(orderId: string, deliveryBoyId: string, notes?: string): Promise<Order | null> {
+    const ord = this.completeOrderDelivery(orderId, deliveryBoyId, notes);
+    if (ord) {
+      await supabaseSaveOrder(ord);
+    }
+    return ord;
   }
 
   // ===================== TRY AT HOME TIMER CONTROLS =====================

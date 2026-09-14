@@ -56,12 +56,30 @@ export const DeliveryBoyPortal: React.FC<DeliveryBoyPortalProps> = ({
     const refreshedBoy = db.getDeliveryBoyById(currentBoy.id) || currentBoy;
     setCurrentBoy(refreshedBoy);
 
+    // Build comprehensive identifier set for this delivery partner
+    const boyKeys = new Set<string>();
+    if (refreshedBoy.id) boyKeys.add(refreshedBoy.id.toLowerCase());
+    if (refreshedBoy.delivery_boy_id) boyKeys.add(refreshedBoy.delivery_boy_id.toLowerCase());
+    if (refreshedBoy.mobile) boyKeys.add(refreshedBoy.mobile.replace(/\D/g, ''));
+    if (currentBoy.id) boyKeys.add(currentBoy.id.toLowerCase());
+    if (currentBoy.delivery_boy_id) boyKeys.add(currentBoy.delivery_boy_id.toLowerCase());
+    if (currentBoy.mobile) boyKeys.add(currentBoy.mobile.replace(/\D/g, ''));
+
     const allOrders = db.getOrders();
-    const assigned = allOrders.filter(
-      (o) =>
-        o.assigned_delivery_boy_id === refreshedBoy.id ||
+    const assigned = allOrders.filter((o) => {
+      const assignedId = (o.assigned_delivery_boy_id || '').toLowerCase();
+      const assignedMobile = (o.assigned_delivery_boy_mobile || '').replace(/\D/g, '');
+      const originalId = (o.original_delivery_boy_id || '').toLowerCase();
+      const originalMobile = (o.original_delivery_boy_mobile || '').replace(/\D/g, '');
+
+      return (
+        boyKeys.has(assignedId) ||
+        (assignedMobile && boyKeys.has(assignedMobile)) ||
+        boyKeys.has(originalId) ||
+        (originalMobile && boyKeys.has(originalMobile)) ||
         (refreshedBoy.assigned_orders || []).includes(o.order_id)
-    );
+      );
+    });
     // Sort latest first
     assigned.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     setOrders(assigned);
@@ -73,6 +91,12 @@ export const DeliveryBoyPortal: React.FC<DeliveryBoyPortalProps> = ({
 
   useEffect(() => {
     loadData();
+
+    // Immediately resolve initial sync from Supabase if in-flight
+    db.waitForInitialSync().then(() => {
+      loadData();
+    });
+
     const handleDataChange = () => {
       loadData();
     };

@@ -368,7 +368,7 @@ export const AdminOrders: React.FC = () => {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, targetStatus: string) => {
+  const handleDrop = async (e: React.DragEvent, targetStatus: string) => {
     e.preventDefault();
     const orderId = e.dataTransfer.getData('text/plain');
     if (!orderId) return;
@@ -382,14 +382,18 @@ export const AdminOrders: React.FC = () => {
     }
 
     let finalStatus: OrderStatus = 'Pending';
-    if (targetStatus === 'New Order') finalStatus = 'Pending';
+    if (targetStatus === 'New Order' || targetStatus === 'Pending') finalStatus = 'Pending';
     else if (targetStatus === 'Confirmed') finalStatus = 'Confirmed';
     else if (targetStatus === 'Processing') finalStatus = 'Processing';
     else if (targetStatus === 'Packed') finalStatus = 'Packed';
     else if (targetStatus === 'Shipped') finalStatus = 'Shipped';
+    else if (targetStatus === 'Out for Delivery') finalStatus = 'Out for Delivery';
     else if (targetStatus === 'Delivered') finalStatus = 'Delivered';
     else if (targetStatus === 'Cancelled') finalStatus = 'Cancelled';
 
+    if (ord.order_status === finalStatus) return;
+
+    // Optimistic local refresh first
     db.updateOrderStatus(
       ord.order_id,
       finalStatus,
@@ -397,6 +401,14 @@ export const AdminOrders: React.FC = () => {
       `Status updated via drag-and-drop to ${targetStatus}`
     );
     refreshOrders();
+
+    // Ensure database-level Supabase update
+    await db.updateOrderStatusAsync(
+      ord.order_id,
+      finalStatus,
+      'Merchant Admin Team',
+      `Status updated via drag-and-drop to ${targetStatus}`
+    );
   };
 
   return (
