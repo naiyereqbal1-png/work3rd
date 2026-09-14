@@ -123,6 +123,10 @@ export const AdminOrderHistory: React.FC = () => {
       }
 
       return true;
+    }).sort((a, b) => {
+      const aTime = new Date(a.created_at || a.order_date || 0).getTime();
+      const bTime = new Date(b.created_at || b.order_date || 0).getTime();
+      return bTime - aTime;
     });
   };
 

@@ -21,6 +21,9 @@ import {
   Truck,
   Activity,
   Check,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { Order, OrderStatus, DeliveryBoy, PaymentStatus, PaymentMethod } from '../../types';
 import { db } from '../../services/db';
@@ -38,6 +41,10 @@ export const AdminOrderManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
   const [partnerFilter, setPartnerFilter] = useState<string>('ALL');
+
+  // Sorting state - Latest timestamp / current time on top by default
+  const [sortDirection, setSortDirection] = useState<'DESC' | 'ASC'>('DESC');
+  const [sortBy, setSortBy] = useState<'TIME' | 'ORDER_NO'>('TIME');
 
   // Modal/Drawer states
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -126,29 +133,29 @@ export const AdminOrderManagement: React.FC = () => {
     });
   };
 
-  // Chronological Sequence & Display Serial Numbers
-  // Sort confirmed/processing orders first by confirmation time, then pending orders by creation time
+  // Chronological Sequence & Display Serial Numbers - Latest Orders (newest timestamp / order no) on top, oldest below
   const getSortedOrders = (filteredList: Order[]) => {
     return [...filteredList].sort((a, b) => {
-      const aConfEvent = a.status_history?.find((h) => h.status === 'Confirmed');
-      const bConfEvent = b.status_history?.find((h) => h.status === 'Confirmed');
+      const aTime = new Date(a.created_at || a.order_date || 0).getTime();
+      const bTime = new Date(b.created_at || b.order_date || 0).getTime();
 
-      const aTime = aConfEvent ? new Date(aConfEvent.changed_at).getTime() : 0;
-      const bTime = bConfEvent ? new Date(bConfEvent.changed_at).getTime() : 0;
-
-      // If both are confirmed, sort chronologically by confirmation timestamp (earliest confirmed first)
-      if (aTime > 0 && bTime > 0) {
-        return aTime - bTime;
+      if (sortBy === 'ORDER_NO') {
+        const aId = (a.order_id || '').toString();
+        const bId = (b.order_id || '').toString();
+        const comp = aId.localeCompare(bId, undefined, { numeric: true, sensitivity: 'base' });
+        return sortDirection === 'DESC' ? -comp : comp;
       }
-      
-      // Confirmed orders always float to the top
-      if (aTime > 0 && bTime === 0) return -1;
-      if (bTime > 0 && aTime === 0) return 1;
 
-      // For unconfirmed/pending orders, sort chronologically by creation date (earliest first)
-      const aCreate = new Date(a.created_at || a.order_date || 0).getTime();
-      const bCreate = new Date(b.created_at || b.order_date || 0).getTime();
-      return aCreate - bCreate;
+      // Primary: Time sorting (DESC = newest / latest timestamp on top)
+      if (bTime !== aTime) {
+        return sortDirection === 'DESC' ? bTime - aTime : aTime - bTime;
+      }
+
+      // Secondary tie-breaker: order_id (DESC = newest order ID on top)
+      const aId = (a.order_id || '').toString();
+      const bId = (b.order_id || '').toString();
+      const comp = aId.localeCompare(bId, undefined, { numeric: true, sensitivity: 'base' });
+      return sortDirection === 'DESC' ? -comp : comp;
     });
   };
 
@@ -417,6 +424,43 @@ export const AdminOrderManagement: React.FC = () => {
               ))}
             </select>
 
+            {/* Sort Control Dropdown & Quick Toggle */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSortBy('TIME');
+                  setSortDirection((prev) => (prev === 'DESC' ? 'ASC' : 'DESC'));
+                }}
+                className={`px-2.5 py-1 text-xs font-bold rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                  sortDirection === 'DESC'
+                    ? 'bg-indigo-600 text-white shadow-3xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100'
+                }`}
+                title={sortDirection === 'DESC' ? 'Current / Latest Orders on Top (Descending)' : 'Oldest Orders on Top (Ascending)'}
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                <span>
+                  {sortDirection === 'DESC' ? '⏱️ Latest First' : '⏱️ Oldest First'}
+                </span>
+              </button>
+
+              <select
+                value={`${sortBy}_${sortDirection}`}
+                onChange={(e) => {
+                  const [sBy, sDir] = e.target.value.split('_');
+                  setSortBy(sBy as 'TIME' | 'ORDER_NO');
+                  setSortDirection(sDir as 'DESC' | 'ASC');
+                }}
+                className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-semibold text-slate-700 outline-hidden cursor-pointer"
+              >
+                <option value="TIME_DESC">Latest Time (Current on Top)</option>
+                <option value="TIME_ASC">Oldest Time (Oldest on Top)</option>
+                <option value="ORDER_NO_DESC">New Order No on Top</option>
+                <option value="ORDER_NO_ASC">Old Order No on Top</option>
+              </select>
+            </div>
+
             {/* Clear filters Button */}
             {(dateRangeFilter !== 'TODAY' || statusFilter !== 'ALL' || partnerFilter !== 'ALL' || paymentFilter !== 'ALL' || search) && (
               <button
@@ -463,8 +507,56 @@ export const AdminOrderManagement: React.FC = () => {
                 <thead>
                   <tr className="bg-slate-50 text-slate-400 font-extrabold uppercase text-[10px] border-b border-slate-200">
                     <th className="px-4 py-3.5 text-center">Serial</th>
-                    <th className="px-4 py-3.5">Order ID</th>
-                    <th className="px-4 py-3.5">Order Time</th>
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none group"
+                      onClick={() => {
+                        if (sortBy === 'ORDER_NO') {
+                          setSortDirection((prev) => (prev === 'DESC' ? 'ASC' : 'DESC'));
+                        } else {
+                          setSortBy('ORDER_NO');
+                          setSortDirection('DESC');
+                        }
+                      }}
+                      title="Sort by Order Number (Newest on top / Oldest on top)"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Order ID</span>
+                        {sortBy === 'ORDER_NO' ? (
+                          sortDirection === 'DESC' ? (
+                            <ArrowDown className="w-3 h-3 text-indigo-600" />
+                          ) : (
+                            <ArrowUp className="w-3 h-3 text-indigo-600" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-500" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none group"
+                      onClick={() => {
+                        if (sortBy === 'TIME') {
+                          setSortDirection((prev) => (prev === 'DESC' ? 'ASC' : 'DESC'));
+                        } else {
+                          setSortBy('TIME');
+                          setSortDirection('DESC');
+                        }
+                      }}
+                      title="Sort by Order Time (Current time on top / Old time on top)"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Order Time</span>
+                        {sortBy === 'TIME' ? (
+                          sortDirection === 'DESC' ? (
+                            <ArrowDown className="w-3 h-3 text-indigo-600" />
+                          ) : (
+                            <ArrowUp className="w-3 h-3 text-indigo-600" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-500" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3.5">Customer</th>
                     <th className="px-4 py-3.5">Items</th>
                     <th className="px-4 py-3.5 text-right">Amount</th>
