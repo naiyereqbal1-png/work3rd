@@ -183,26 +183,14 @@ class DatabaseService {
     if (cloud.settings) {
       this.setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(cloud.settings));
     }
-    if (cloud.categories && cloud.categories.length > 0) {
+    if (cloud.categories) {
       this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cloud.categories));
     }
-    if (cloud.products && cloud.products.length > 0) {
-      const existing = this.getAllProducts();
-      const cloudIds = new Set(cloud.products.map((p) => p.id));
-      const merged = [...cloud.products];
-      for (const item of existing) {
-        if (!cloudIds.has(item.id)) merged.push(item);
-      }
-      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(merged));
+    if (cloud.products) {
+      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(cloud.products));
     }
-    if (cloud.customers && cloud.customers.length > 0) {
-      const existing = this.getCustomers();
-      const cloudIds = new Set(cloud.customers.map((c) => c.id));
-      const merged = [...cloud.customers];
-      for (const item of existing) {
-        if (!cloudIds.has(item.id)) merged.push(item);
-      }
-      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(merged));
+    if (cloud.customers) {
+      this.setStorageItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cloud.customers));
       const currentCust = this.getCurrentCustomer();
       if (currentCust) {
         const matched = cloud.customers.find((c) => c.customer_id === currentCust.customer_id || c.id === currentCust.id);
@@ -211,27 +199,11 @@ class DatabaseService {
         }
       }
     }
-    if (cloud.orders && cloud.orders.length > 0) {
-      const existing = this.getOrders();
-      const cloudOrderKeys = new Set(cloud.orders.map((o) => o.order_id || o.id));
-      const merged = [...cloud.orders];
-      for (const item of existing) {
-        const itemKey = item.order_id || item.id;
-        if (!cloudOrderKeys.has(itemKey)) merged.push(item);
-      }
-      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(merged));
+    if (cloud.orders) {
+      this.setStorageItem(STORAGE_KEYS.ORDERS, JSON.stringify(cloud.orders));
     }
-    if (cloud.deliveryBoys && cloud.deliveryBoys.length > 0) {
-      const existing = this.getDeliveryBoys();
-      const cloudIds = new Set(cloud.deliveryBoys.map((d) => d.id));
-      const cloudBoyIds = new Set(cloud.deliveryBoys.map((d) => d.delivery_boy_id));
-      const merged = [...cloud.deliveryBoys];
-      for (const item of existing) {
-        if (!cloudIds.has(item.id) && (!item.delivery_boy_id || !cloudBoyIds.has(item.delivery_boy_id))) {
-          merged.push(item);
-        }
-      }
-      this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(merged));
+    if (cloud.deliveryBoys) {
+      this.setStorageItem(STORAGE_KEYS.DELIVERY_BOYS, JSON.stringify(cloud.deliveryBoys));
 
       // Keep active delivery partner session synchronized
       const currentBoy = this.getCurrentDeliveryBoy();
@@ -248,19 +220,13 @@ class DatabaseService {
         }
       }
     }
-    if (cloud.shopkeepers && cloud.shopkeepers.length > 0) {
-      const existing = this.getShopkeepers();
-      const cloudIds = new Set(cloud.shopkeepers.map((s) => s.id));
-      const merged = [...cloud.shopkeepers];
-      for (const item of existing) {
-        if (!cloudIds.has(item.id)) merged.push(item);
-      }
-      this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(merged));
+    if (cloud.shopkeepers) {
+      this.setStorageItem(STORAGE_KEYS.SHOPKEEPERS, JSON.stringify(cloud.shopkeepers));
     }
-    if (cloud.returns && cloud.returns.length > 0) {
+    if (cloud.returns) {
       this.setStorageItem(STORAGE_KEYS.RETURNS, JSON.stringify(cloud.returns));
     }
-    if (cloud.stockTransactions && cloud.stockTransactions.length > 0) {
+    if (cloud.stockTransactions) {
       this.setStorageItem(STORAGE_KEYS.STOCK_TRANSACTIONS, JSON.stringify(cloud.stockTransactions));
     }
 
@@ -294,17 +260,26 @@ class DatabaseService {
   private initDatabase() {
     if (typeof window === 'undefined') return;
 
+    // Purge obsolete local demo products cache once
+    try {
+      const isCleared = localStorage.getItem('style1_demo_products_cleared');
+      if (isCleared !== 'true') {
+        localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
+        localStorage.setItem('style1_demo_products_cleared', 'true');
+      }
+    } catch {}
+
     // Categories
     const existingCats = this.getStorageItem(STORAGE_KEYS.CATEGORIES);
     if (!existingCats) {
       this.setStorageItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
     }
 
-    // Products
+    // Products - Do NOT seed demo products locally; keep an empty list as fallback.
+    // Real product data will be pulled instantly from Supabase via syncFromSupabase.
     const existingProds = this.getStorageItem(STORAGE_KEYS.PRODUCTS);
     if (!existingProds) {
-      const demoProds = generateDemoProducts();
-      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(demoProds));
+      this.setStorageItem(STORAGE_KEYS.PRODUCTS, JSON.stringify([]));
     }
 
     // Settings

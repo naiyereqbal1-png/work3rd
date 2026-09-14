@@ -8,7 +8,7 @@ import { printInvoiceElement, downloadInvoicePDF } from '../../utils/printInvoic
 interface OrderInvoiceModalProps {
   order: Order | null;
   onClose: () => void;
-  userRole?: 'Customer' | 'Admin' | 'Delivery Partner';
+  userRole?: 'Customer' | 'Admin' | 'Delivery Partner' | 'DeliveryBoy';
   onBillGenerated?: (updatedOrder: Order) => void;
 }
 

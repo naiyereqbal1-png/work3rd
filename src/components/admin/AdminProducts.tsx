@@ -77,10 +77,32 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
     refreshProducts();
   };
 
-  const handleDelete = (productId: string) => {
+  const handleDelete = async (productId: string) => {
     if (confirm('Are you sure you want to delete this garment? This action cannot be undone.')) {
-      db.deleteProduct(productId);
-      refreshProducts();
+      setIsSyncing(true);
+      try {
+        await db.deleteProductAsync(productId);
+        alert('Product deleted successfully from both local storage and live Supabase database.');
+      } catch (err: any) {
+        console.error("Failed to delete product:", err);
+        const errMsg = err?.message || String(err);
+        const isForeignKey = errMsg.includes("order_items") || errMsg.includes("constraint");
+        if (isForeignKey) {
+          if (confirm('This garment has active order history / references in existing customer purchases and cannot be deleted physically. Would you like to unpublish and hide it from customers instead?')) {
+            try {
+              await db.updateProductAsync(productId, { status: 'Unpublished', is_live: false });
+              alert('Product has been successfully unpublished and hidden from the customer storefront.');
+            } catch (updateErr: any) {
+              alert(`Failed to unpublish product: ${updateErr.message || updateErr}`);
+            }
+          }
+        } else {
+          alert(`Failed to delete product: ${errMsg}`);
+        }
+      } finally {
+        setIsSyncing(false);
+        refreshProducts();
+      }
     }
   };
 

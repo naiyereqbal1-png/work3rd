@@ -539,6 +539,19 @@ export interface StoreSettings {
   theme_header?: string;
   theme_footer?: string;
 
+  // Compatibility fields for legacy and dual-key alignment
+  primary_color?: string;
+  secondary_color?: string;
+  accent_color?: string;
+  bg_color?: string;
+  text_color?: string;
+  heading_color?: string;
+  header_bg_color?: string;
+  footer_bg_color?: string;
+  website_logo?: string;
+  favicon?: string;
+  header_text_color?: string;
+
   // Centralized Branding Logos & Images
   logo_website?: string;
   logo_favicon?: string;
