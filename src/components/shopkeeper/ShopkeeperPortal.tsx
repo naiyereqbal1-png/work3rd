@@ -681,7 +681,7 @@ export const ShopkeeperPortal: React.FC<ShopkeeperPortalProps> = ({
 
       setFormMsg({
         type: 'success',
-        text: `Product added successfully. Data saved to database.`,
+        text: `Product submitted for admin approval.`,
       });
 
       setTimeout(() => {

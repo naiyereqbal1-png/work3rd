@@ -170,9 +170,9 @@ export const AdminShopkeepers: React.FC = () => {
         sizes: parsedSizes,
         colors: parsedColors,
         approval_status: editApprovalStatus,
-        is_live: editIsLive,
+        is_live: editApprovalStatus === 'APPROVED' ? editIsLive : false,
         images,
-        status: Number(editStock) <= 0 ? 'Out of Stock' : (editIsLive ? 'Published' : 'Draft'),
+        status: Number(editStock) <= 0 ? 'Out of Stock' : (editApprovalStatus === 'APPROVED' && editIsLive ? 'Published' : 'Draft'),
       };
 
       const res = await db.updateProductAsync(editingProduct.id, updates);
@@ -246,25 +246,29 @@ export const AdminShopkeepers: React.FC = () => {
     }
   };
 
-  const handleApprove = (product: Product) => {
+  const handleApprove = async (product: Product) => {
     try {
       const customAdminPrice = adminPriceOverrides[product.id];
       if (customAdminPrice !== undefined && customAdminPrice > 0) {
-        db.adminSetProductSellingPrice(product.id, customAdminPrice);
+        await db.updateProductAsync(product.id, {
+          admin_selling_price: customAdminPrice,
+          selling_price: customAdminPrice,
+        });
       }
-      db.adminApproveProduct(product.id, 'admin-1', 'Admin Lead');
-      // Also automatically make it live if stock > 0
-      db.adminSetProductLive(product.id, true);
+      await db.adminApproveProductAsync(product.id, 'admin-1', 'Admin Lead');
+      refreshData();
     } catch (err: any) {
       alert(err.message || 'Failed to approve');
     }
   };
 
-  const handleRejectConfirm = () => {
+  const handleRejectConfirm = async () => {
     if (!rejectModalProduct) return;
     try {
-      db.adminRejectProduct(rejectModalProduct.id, rejectReason, 'admin-1', 'Admin Lead');
+      await db.adminRejectProductAsync(rejectModalProduct.id, rejectReason, 'admin-1', 'Admin Lead');
       setRejectModalProduct(null);
+      setRejectReason('');
+      refreshData();
     } catch (err: any) {
       alert(err.message || 'Failed to reject');
     }

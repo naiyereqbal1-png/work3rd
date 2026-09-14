@@ -998,7 +998,10 @@ class DatabaseService {
           (p.stock || 0) > 0
         );
       }
-      return p.status === 'Published' && (p.stock || 0) > 0;
+      if (p.approval_status && p.approval_status !== 'APPROVED') {
+        return false;
+      }
+      return p.status === 'Published' && p.is_live !== false && (p.stock || 0) > 0;
     });
 
     if (options?.categorySlug) {
@@ -1272,7 +1275,6 @@ class DatabaseService {
       shopkeeper_price: shopkeeperPrice,
       discount_percentage: discount,
       stock: productData.stock !== undefined ? Number(productData.stock) : 40,
-      status,
       rating: productData.rating || 5.0,
       rating_count: productData.rating_count || 0,
       sizes: productData.sizes || [],
@@ -1281,9 +1283,10 @@ class DatabaseService {
       specifications: productData.specifications || {},
       shopkeeper_id: productData.shopkeeper_id || null,
       shopkeeper_name: productData.shopkeeper_name || null,
-      approval_status: productData.approval_status || 'APPROVED',
+      approval_status: productData.approval_status || (productData.shopkeeper_id ? 'PENDING' : 'APPROVED'),
       rejection_reason: productData.rejection_reason || null,
-      is_live: productData.is_live !== false,
+      is_live: productData.approval_status === 'APPROVED' ? (productData.is_live !== false) : false,
+      status: (productData.approval_status === 'APPROVED' || !productData.shopkeeper_id) ? (status || 'Published') : 'Draft',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       images: productData.images || [],
@@ -1837,7 +1840,7 @@ class DatabaseService {
       shopkeeper_price: shopkeeperPrice,
       discount_percentage: discount,
       stock: initStock,
-      status: 'Published',
+      status: 'Draft',
       rating: 4.8,
       rating_count: 1,
       sizes: data.sizes && data.sizes.length > 0 ? data.sizes : ['M', 'L', 'XL'],
@@ -1853,8 +1856,8 @@ class DatabaseService {
       updated_at: new Date().toISOString(),
       shopkeeper_id: shopkeeper.shopkeeper_id || shopkeeper.id,
       shopkeeper_name: shopkeeper.name,
-      approval_status: 'APPROVED',
-      is_live: true,
+      approval_status: 'PENDING',
+      is_live: false,
     };
 
     all.unshift(newProd);
@@ -1934,6 +1937,14 @@ class DatabaseService {
     delete cleanUpdates.reviewed_by;
     delete cleanUpdates.reviewed_at;
 
+    // If product was REJECTED and shopkeeper edits it, resubmit for approval
+    if (prod.approval_status === 'REJECTED') {
+      cleanUpdates.approval_status = 'PENDING';
+      cleanUpdates.is_live = false;
+      cleanUpdates.status = 'Draft';
+      cleanUpdates.rejection_reason = undefined;
+    }
+
     const updated = this.updateProduct(productId, cleanUpdates);
     this.recalculateShopkeeperStats(shopkeeperId);
     return updated!;
@@ -2009,8 +2020,11 @@ class DatabaseService {
   adminApproveProduct(productId: string, adminId: string, adminName: string): Product {
     const prod = this.getProductById(productId);
     if (!prod) throw new Error('Product not found.');
+    const isLive = (prod.stock || 0) > 0;
     const updated = this.updateProduct(productId, {
       approval_status: 'APPROVED',
+      is_live: isLive,
+      status: isLive ? 'Published' : 'Out of Stock',
       reviewed_by: adminName,
       reviewed_at: new Date().toISOString(),
       rejection_reason: undefined,
@@ -2018,6 +2032,24 @@ class DatabaseService {
     if (prod.shopkeeper_id) this.recalculateShopkeeperStats(prod.shopkeeper_id);
     notifyDataChanged();
     return updated!;
+  }
+
+  async adminApproveProductAsync(productId: string, adminId: string, adminName: string): Promise<Product> {
+    const prod = this.getProductById(productId);
+    if (!prod) throw new Error('Product not found.');
+    const isLive = (prod.stock || 0) > 0;
+    const updated = await this.updateProductAsync(productId, {
+      approval_status: 'APPROVED',
+      is_live: isLive,
+      status: isLive ? 'Published' : 'Out of Stock',
+      reviewed_by: adminName,
+      reviewed_at: new Date().toISOString(),
+      rejection_reason: undefined,
+    });
+    if (!updated) throw new Error('Failed to update product approval status.');
+    if (prod.shopkeeper_id) this.recalculateShopkeeperStats(prod.shopkeeper_id);
+    notifyDataChanged();
+    return updated;
   }
 
   adminRejectProduct(productId: string, reason: string, adminId: string, adminName: string): Product {
@@ -2034,6 +2066,23 @@ class DatabaseService {
     if (prod.shopkeeper_id) this.recalculateShopkeeperStats(prod.shopkeeper_id);
     notifyDataChanged();
     return updated!;
+  }
+
+  async adminRejectProductAsync(productId: string, reason: string, adminId: string, adminName: string): Promise<Product> {
+    const prod = this.getProductById(productId);
+    if (!prod) throw new Error('Product not found.');
+    const updated = await this.updateProductAsync(productId, {
+      approval_status: 'REJECTED',
+      is_live: false,
+      status: 'Draft',
+      rejection_reason: reason || 'Product details require revisions.',
+      reviewed_by: adminName,
+      reviewed_at: new Date().toISOString(),
+    });
+    if (!updated) throw new Error('Failed to update product rejection status.');
+    if (prod.shopkeeper_id) this.recalculateShopkeeperStats(prod.shopkeeper_id);
+    notifyDataChanged();
+    return updated;
   }
 
   adminSetProductLive(productId: string, isLive: boolean): Product {

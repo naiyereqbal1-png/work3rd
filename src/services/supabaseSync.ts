@@ -546,9 +546,9 @@ export async function supabaseSaveProduct(product: Product): Promise<boolean> {
       specifications: product.specifications || {},
       shopkeeper_id: product.shopkeeper_id || null,
       shopkeeper_name: product.shopkeeper_name || null,
-      approval_status: product.approval_status || "APPROVED",
+      approval_status: product.approval_status || (product.shopkeeper_id ? "PENDING" : "APPROVED"),
       rejection_reason: product.rejection_reason || null,
-      is_live: product.is_live !== false,
+      is_live: product.approval_status === "APPROVED" ? (product.is_live === true) : false,
       updated_at: new Date().toISOString(),
     };
 

@@ -276,9 +276,14 @@ export default function App() {
 
   // Customer filter for live published garments only (approved & live)
   const publishedProducts = products.filter((p) => {
-    const isApproved = !p.approval_status || p.approval_status === 'APPROVED';
+    if (p.shopkeeper_id) {
+      const sk = db.getShopkeeperById(p.shopkeeper_id);
+      if (sk && sk.status !== 'ACTIVE') return false;
+      return p.approval_status === 'APPROVED' && p.is_live === true && p.status === 'Published' && (p.stock || 0) > 0;
+    }
+    const isApproved = p.approval_status ? p.approval_status === 'APPROVED' : true;
     const isLive = p.is_live !== false;
-    return p.status === 'Published' && isApproved && isLive;
+    return p.status === 'Published' && isApproved && isLive && (p.stock || 0) > 0;
   });
   const wishlistIds = wishlist.map((w) => w.product_id);
 
