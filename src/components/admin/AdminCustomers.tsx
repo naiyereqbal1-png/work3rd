@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Users, ShoppingBag, Eye, Calendar, Phone, Mail, Download, Printer, FileSpreadsheet, FileText } from 'lucide-react';
 import { Customer, Order } from '../../types';
 import { db } from '../../services/db';
@@ -9,6 +9,27 @@ export const AdminCustomers: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
+
+  const refreshCustomers = () => {
+    const updatedList = db.getCustomers();
+    setCustomers(updatedList);
+    if (selectedCustomer) {
+      const refreshedCust = updatedList.find((c) => c.customer_id === selectedCustomer.customer_id || c.id === selectedCustomer.id);
+      if (refreshedCust) {
+        setSelectedCustomer(refreshedCust);
+        setCustomerOrders(db.getCustomerOrders(refreshedCust.customer_id));
+      }
+    }
+  };
+
+  useEffect(() => {
+    refreshCustomers();
+    const handleSync = () => {
+      refreshCustomers();
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, [selectedCustomer?.customer_id]);
 
   const handleSelectCustomer = (c: Customer) => {
     setSelectedCustomer(c);
@@ -331,7 +352,7 @@ export const AdminCustomers: React.FC = () => {
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-200">
             <div>
-              <h1 className="text-xl font-black text-indigo-900 uppercase tracking-wide">STYLE SPHERE FASHIONS</h1>
+              <h1 className="text-xl font-black text-slate-900 uppercase tracking-wide">{db.getSettings()?.store_name || 'STYLE SPHERE FASHIONS'}</h1>
               <p className="text-xs font-bold text-slate-500">Registered Customers Directory & VIP Intelligence Report</p>
             </div>
             <div className="text-right text-xs">

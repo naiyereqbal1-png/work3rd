@@ -499,6 +499,8 @@ export interface AdminUser {
 export interface StoreSettings {
   store_name: string;
   store_tagline: string;
+  store_address?: string;
+  gst_number?: string;
   contact_email: string;
   contact_phone: string;
   delivery_charge: number;

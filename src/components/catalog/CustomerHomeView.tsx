@@ -45,6 +45,15 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [settings, setSettings] = useState(() => db.getSettings());
   const [heroBg, setHeroBg] = useState(() => db.getHeroBackgroundImage());
+
+  useEffect(() => {
+    const handleSync = () => {
+      setSettings(db.getSettings());
+      setHeroBg(db.getHeroBackgroundImage());
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, []);
   const [filters, setFilters] = useState<FilterState>({
     categorySlug: activeCategorySlug,
     gender: 'All',

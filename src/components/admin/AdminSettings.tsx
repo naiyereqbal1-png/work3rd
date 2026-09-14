@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   RotateCcw,
@@ -35,6 +35,14 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onCatalogReset }) 
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'CAROUSEL' | 'GENERAL'>('CAROUSEL');
+
+  useEffect(() => {
+    const handleSync = () => {
+      setSettings(db.getSettings());
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, []);
 
   const handleTestSms = async () => {
     if (!testMobile || testMobile.replace(/\D/g, '').length < 10) {

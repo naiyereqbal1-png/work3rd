@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Check, X, Image as ImageIcon, Eye, EyeOff } from 'lucide-react';
 import { Category } from '../../types';
 import { db } from '../../services/db';
@@ -22,6 +22,15 @@ export const AdminCategories: React.FC = () => {
   const refreshCategories = () => {
     setCategories(db.getCategories());
   };
+
+  useEffect(() => {
+    refreshCategories();
+    const handleSync = () => {
+      refreshCategories();
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, []);
 
   const handleOpenAdd = () => {
     setEditingCategory(null);

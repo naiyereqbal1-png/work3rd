@@ -28,7 +28,8 @@ export interface SupabaseFullData {
   stockTransactions: StockTransaction[];
 }
 
-let isFetching = false;
+let activeFetchPromise: Promise<SupabaseFullData | null> | null = null;
+let hasQueuedFetch = false;
 const warnedTables = new Set<string>();
 
 /**
@@ -78,19 +79,22 @@ export function handleSupabaseError(table: string, action: string, error: any): 
  * Fetch all application tables from Supabase into memory.
  */
 export async function fetchFullDataFromSupabase(): Promise<SupabaseFullData | null> {
-  if (isFetching) return null;
-  isFetching = true;
-  console.log("[Supabase] Querying complete cloud dataset in parallel from Supabase...");
+  if (activeFetchPromise) {
+    hasQueuedFetch = true;
+    return activeFetchPromise;
+  }
 
-  try {
-    // Execute all primary database queries concurrently to eliminate sequential network latency
-    const safeQuery = async <T>(query: PromiseLike<T>): Promise<T | { data: null; error: any }> => {
-      try {
-        return await query;
-      } catch (err) {
-        return { data: null, error: err };
-      }
-    };
+  const executeFetch = async (): Promise<SupabaseFullData | null> => {
+    console.log("[Supabase] Querying complete cloud dataset in parallel from Supabase...");
+    try {
+      // Execute all primary database queries concurrently to eliminate sequential network latency
+      const safeQuery = async <T>(query: PromiseLike<T>): Promise<T | { data: null; error: any }> => {
+        try {
+          return await query;
+        } catch (err) {
+          return { data: null, error: err };
+        }
+      };
 
     const [
       settingsRes,
@@ -248,7 +252,6 @@ export async function fetchFullDataFromSupabase(): Promise<SupabaseFullData | nu
     const stockTransactions: StockTransaction[] = (stockTxRes?.data as StockTransaction[]) || [];
 
     console.log(`[Supabase Live Sync] Parallel fetch loaded ${products.length} products, ${orders.length} orders, ${customers.length} customers, ${deliveryBoys.length} delivery partners.`);
-    isFetching = false;
     return {
       settings,
       categories,
@@ -262,9 +265,22 @@ export async function fetchFullDataFromSupabase(): Promise<SupabaseFullData | nu
     };
   } catch (err: any) {
     console.warn("[Supabase] Notice loading cloud dataset:", err?.message || err);
-    isFetching = false;
     return null;
+  } finally {
+    activeFetchPromise = null;
+    if (hasQueuedFetch) {
+      hasQueuedFetch = false;
+      if (typeof window !== "undefined") {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("style1_trigger_cloud_sync"));
+        }, 50);
+      }
+    }
   }
+};
+
+activeFetchPromise = executeFetch();
+return activeFetchPromise;
 }
 
 // ----------------------------------------------------------------------
@@ -1021,23 +1037,45 @@ export async function supabaseDeleteDeliveryBoy(id: string): Promise<boolean> {
 }
 
 /**
- * Setup Realtime channel on public schema for cross-PC live synchronization.
+ * Setup Realtime channel on public schema for cross-panel / cross-device live synchronization.
  */
+let realtimeDebounceTimer: any = null;
+
 export function supabaseSubscribeRealtime(onDatabaseChange: () => void): () => void {
   try {
+    const triggerDebouncedSync = (table?: string, eventType?: string) => {
+      if (realtimeDebounceTimer) {
+        clearTimeout(realtimeDebounceTimer);
+      }
+      realtimeDebounceTimer = setTimeout(() => {
+        console.log(`[Supabase Realtime Sync] Dispatching refresh triggered by table "${table || 'unknown'}" (${eventType || 'change'})`);
+        onDatabaseChange();
+      }, 50);
+    };
+
     const channel = supabase
-      .channel("public-db-changes")
+      .channel("style1-realtime-root-channel")
       .on(
         "postgres_changes",
         { event: "*", schema: "public" },
         (payload) => {
-          console.log("[Supabase Realtime] Change detected in table:", payload.table);
-          onDatabaseChange();
+          console.log(`[Supabase Realtime] Event "${payload.eventType}" on table: "${payload.table}"`);
+          triggerDebouncedSync(payload.table, payload.eventType);
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          console.log("[Supabase Realtime] Root channel successfully connected & listening to database changes.");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          console.warn(`[Supabase Realtime] Channel status: ${status}. Scheduling fresh cloud sync.`);
+          triggerDebouncedSync();
+        }
+      });
 
     return () => {
+      if (realtimeDebounceTimer) {
+        clearTimeout(realtimeDebounceTimer);
+      }
       supabase.removeChannel(channel);
     };
   } catch (err) {

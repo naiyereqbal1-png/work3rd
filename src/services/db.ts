@@ -255,6 +255,25 @@ class DatabaseService {
     supabaseSubscribeRealtime(() => {
       this.syncFromSupabase();
     });
+
+    // Cross-tab and recovery sync listeners
+    if (typeof window !== 'undefined') {
+      window.addEventListener('style1_trigger_cloud_sync', () => {
+        this.syncFromSupabase();
+      });
+      window.addEventListener('online', () => {
+        console.log('[Connection Restored] Device came online, refreshing cloud dataset...');
+        this.syncFromSupabase();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.syncFromSupabase();
+        }
+      });
+      window.addEventListener('focus', () => {
+        this.syncFromSupabase();
+      });
+    }
   }
 
   private initDatabase() {

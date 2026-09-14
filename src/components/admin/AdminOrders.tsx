@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Truck,
@@ -89,6 +89,14 @@ export const AdminOrders: React.FC = () => {
       setFullDetailOrder(updated);
     }
   };
+
+  useEffect(() => {
+    const handleSync = () => {
+      refreshOrders();
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, [selectedOrder?.order_id, fullDetailOrder?.order_id]);
 
   const handleSelectOrder = (order: Order) => {
     setSelectedOrder(order);

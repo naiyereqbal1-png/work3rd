@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
   ShoppingBag,
@@ -13,6 +13,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { db } from '../../services/db';
+import { Order, Product } from '../../types';
 
 interface AdminDashboardProps {
   onNavigateTab: (tab: string) => void;
@@ -23,9 +24,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigateTab,
   onOpenAddProduct,
 }) => {
-  const stats = db.getDashboardStats();
-  const recentOrders = db.getOrders().slice(0, 5);
-  const lowStockProducts = db.getAllProducts().filter((p) => p.stock <= 10).slice(0, 5);
+  const [stats, setStats] = useState(() => db.getDashboardStats());
+  const [recentOrders, setRecentOrders] = useState<Order[]>(() => db.getOrders().slice(0, 5));
+  const [lowStockProducts, setLowStockProducts] = useState<Product[]>(() =>
+    db.getAllProducts().filter((p) => p.stock <= 10).slice(0, 5)
+  );
+
+  const refreshDashboard = () => {
+    setStats(db.getDashboardStats());
+    setRecentOrders(db.getOrders().slice(0, 5));
+    setLowStockProducts(db.getAllProducts().filter((p) => p.stock <= 10).slice(0, 5));
+  };
+
+  useEffect(() => {
+    refreshDashboard();
+    const handleSync = () => {
+      refreshDashboard();
+    };
+    window.addEventListener('style1_data_changed', handleSync);
+    return () => window.removeEventListener('style1_data_changed', handleSync);
+  }, []);
 
   const statusColors: Record<string, string> = {
     Pending: 'bg-amber-100 text-amber-800',
